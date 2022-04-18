@@ -42,10 +42,13 @@ def get_case_id_file_map(case_ids):
 def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    df = df[:5]
+    df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
+    # with open('case_id_tsv_file.csv', 'w') as f:
+    #     [f.write('{0},{1}\n'.format(key, value)) for key, value in case_id_tsv_file_dict.items()]
     final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
-    for i in range(len(df)):
+
+    for i in range(0,len(df)):
         try:
             case_id = df.loc[i, 'CaseID']
             hpo_id = df.loc[i, 'hpo_id']
@@ -88,7 +91,7 @@ def main():
         except Exception as e:
             print(e)
     print(f"final result length is: {len(final_big_table)}")
-    final_big_table.to_csv("ground_truth_symbol.csv")
+    final_big_table.to_csv("ground_truth_symbol_1.csv")
 
 
 
