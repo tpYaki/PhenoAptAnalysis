@@ -4,8 +4,7 @@
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 import os
 
-from ./phenoapt import PhenoApt
-client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+from phenoapt import PhenoApt
 
 import xlrd
 import pandas as pd
@@ -43,24 +42,35 @@ def get_case_id_file_map(case_ids):
     return case_id_tsv_file_map
 
 def main():
+    client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+    result=client.rank_gene(['HP:0002650','HP:0008423','HP:0001067','HP:0000772','HP:0008453','HP:0007565'], weight=[1,1,1,1,1,1], n=1000)
+    print(len(result.rank_frame))
+
+def main_1():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    df = df[:5]
+    df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
     final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
-    for i in range(len(df)):
+    for i in range(1,len(df)):
         try:
             case_id = df.loc[i, 'CaseID']
             hpo_id = df.loc[i, 'hpo_id']
+            hpo_id_input=','.join([f"'{str(k)}'" for k in (hpo_id.split(";"))])
             symbol = df.loc[i, "Symbol"]
-            weight = ','.join([str(1) for i in range(len(hpo_id.split(";")))])
-            command = f"phenoapt rank-gene -p '{hpo_id}' -w '{weight}' -n 1000"
+            weight = ','.join([str(1) for k in range(len(hpo_id.split(";")))])
+            command = f"[{hpo_id_input}], weight=[{weight}], n=1000"
+            #['HP:0001193','HP:0001231','HP:0002999','HP:0003621','bad_phenotype'], weight=[1,2,2,1,6], n=5
             print(command)
-            result = subprocess.getoutput(command)
-            lines = result.split("\n")
-            columns = re.split('\s+', lines[0].strip())
-            rows = [re.split("\s+", line.strip()) for line in lines[2:]]
-            pheno_result = pd.DataFrame(columns=columns, data=rows)
+            # result = subprocess.getoutput(command)
+            # lines = result.split("\n")
+            # columns = re.split('\s+', lines[0].strip())
+            # rows = [re.split("\s+", line.strip()) for line in lines[2:]]
+            # pheno_result = pd.DataFrame(columns=columns, data=rows)
+            # client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+            client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+            pheno_result = (client.rank_gene(command))
+            print(pheno_result)
             pheno_gene_rank = {}
             for j, v in enumerate(pheno_result["gene_symbol"]):
                 pheno_gene_rank[v] = j
@@ -97,6 +107,7 @@ def main():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    main()
+
+    main_1()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
