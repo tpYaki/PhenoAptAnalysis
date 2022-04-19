@@ -4,6 +4,9 @@
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 import os
 
+from ./phenoapt import PhenoApt
+client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+
 import xlrd
 import pandas as pd
 import subprocess
