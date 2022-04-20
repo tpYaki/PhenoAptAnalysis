@@ -94,9 +94,11 @@ def patho_filter_n(df,threshold):
 def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    ##df = df[:1]
+    #df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
-    final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10','Patho_rank_CADD_15','Patho_rank_CADD_20','Symbol'])
+    final_big_table = pd.DataFrame(
+        columns=['CaseID', 'hpo_id', 'Symbol', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10',
+                 'Patho_rank_CADD_15', 'Patho_rank_CADD_20'])
 
     for i in range(len(df)):
         try:
@@ -120,9 +122,6 @@ def main():
             variation = pd.read_csv(case_id_tsv_file_dict[case_id], sep="\t")
             variation_gene_name = variation['Gene_name']
 
-
-
-
             #仅取TSV基因的交集排序
             intersect_gene = pheno_result[pheno_result.gene_symbol.isin(variation_gene_name)]
             intersect_gene_rank = {}
@@ -134,19 +133,40 @@ def main():
             filtered_result['CaseID'] = [case_id for gene in filtered_result['Gene_name']]
 
 
-            #求致病性突变过滤后的基因排序
-            for w in (10,15,20):
-                variation_p = patho_filter_n(variation,w)
-                patho_gene_name = variation_p['Gene_name']
-                patho_gene = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name)]
-                patho_gene_rank_10 = {}
-                for j, v in enumerate(patho_gene["gene_symbol"]):
-                    patho_gene_rank_10[v] = j  ##写出rank
+            # #求致病性突变过滤后的基因排序
+            # for w in (10,15,20)
+            #     variation_p_w = patho_filter_n(variation,w)
+            #     patho_gene_name_w = variation_p_w['Gene_name']
+            #     patho_gene_w = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_w)]
+            #     patho_gene_rank_w = {}
+            #     for j, v in enumerate(patho_gene_w["gene_symbol"]):
+            #         patho_gene_rank_w[v] = j
+            #     dict(name=f"patho_gene_rank_{w}")=patho_gene_rank_w
+            variation_p_10 = patho_filter_n(variation, 10)
+            patho_gene_name_10 = variation_p_10['Gene_name']
+            patho_gene_10 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_10)]
+            patho_gene_rank_10 = {}
+            for j, v in enumerate(patho_gene_10["gene_symbol"]):
+                patho_gene_rank_10[v] = j
+
+            variation_p_15 = patho_filter_n(variation, 15)
+            patho_gene_name_15 = variation_p_15['Gene_name']
+            patho_gene_15 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_15)]
+            patho_gene_rank_15 = {}
+            for j, v in enumerate(patho_gene_15["gene_symbol"]):
+                patho_gene_rank_15[v] = j
+
+            variation_p_20 = patho_filter_n(variation, 20)
+            patho_gene_name_20 = variation_p_20['Gene_name']
+            patho_gene_20 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_20)]
+            patho_gene_rank_20 = {}
+            for j, v in enumerate(patho_gene_20["gene_symbol"]):
+                patho_gene_rank_20[v] = j
+            final_big_table.loc[i] = [case_id, hpo_id, symbol, pheno_gene_rank.get(symbol, 'NA'),
+                                      intersect_gene_rank.get(symbol, 'NA'), patho_gene_rank_10.get(symbol, 'NA'), patho_gene_rank_15.get(symbol, 'NA'),patho_gene_rank_20.get(symbol, 'NA')] ##写出rank
 
 
             #final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
-            final_big_table.loc[i] = [case_id, hpo_id, pheno_gene_rank.get(symbol, 'NA'),
-                                      intersect_gene_rank.get(symbol, 'NA'),patho_gene_rank_10.get(symbol,'NA') ,patho_gene_rank_15.get(symbol,'NA'),patho_gene_rank_20.get(symbol,'NA'),symbol]
 
             #print(lines)
             print(case_id)
@@ -156,6 +176,8 @@ def main():
     print(f"final result length is: {len(final_big_table)}")
     final_big_table.to_csv("strategy _compare_3.csv")
 
+def picture(df):
+    df = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
 
 
 # Press the green button in the gutter to run the script.
