@@ -41,17 +41,62 @@ def get_case_id_file_map(case_ids):
                 case_id_tsv_file_map[case_id] = os.path.join(tsv_dir, file_name)
     return case_id_tsv_file_map
 
-def main():
-    client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
-    result=client.rank_gene(['HP:0004322','HP:0001376','HP:0011220','HP:0005280','HP:0000343','HP:0000470','HP:0000772'], weight=[1,1,1,1,1,1,1], n=1000)
-    print(result.rank_frame)
+def containtype(biao,type):
+    data_mut = biao[biao["Mutation_type"].str.contains(type)]
+    return data_mut
+    # 包含字符串type=“”的rows，Na的单元格自动去掉
 
-def main_1():
+def selectsmall(biao,name,thresh):
+    data_mut1 = biao[biao[name] != "."]
+    data_mut3 = data_mut1[data_mut1[name] != "nan"]## df,"Exac"
+
+    def is_float(x):
+        try:
+            float(x)
+        except ValueError:
+            return False
+        return True
+    data_mut12 = data_mut3[data_mut3[name].apply(lambda x: is_float(x))]
+    data_mut12[name] = pd.to_numeric(data_mut12[name], errors='raise')
+    data_mut2 = (data_mut12[(data_mut12[name]) < thresh].append(biao[biao[name] == "."])).append(biao[biao[name]=="nan"])
+    return data_mut2
+
+def selectbig(biao,name,thresh):
+    data_mut1 = biao[biao[name] != "."]
+    data_mut3 = data_mut1[data_mut1[name] != "nan"]  ## df,"Exac"
+    def is_float(x):
+        try:
+            float(x)
+        except ValueError:
+            return False
+        return True
+    data_mut12 = data_mut3[data_mut3[name].apply(lambda x: is_float(x))]
+    data_mut12[name] = pd.to_numeric(data_mut12[name], errors='raise')
+    data_mut2 = (data_mut12[data_mut12[name] > thresh].append(biao[biao[name] == "."])).append(biao[biao[name]=="nan"])
+    return data_mut2
+
+def patho_filter_n(df,threshold):
+    ##data2 = ((containtype(data1, "missense_variant")).append(containtype(data1, "stop_gained"))).append(containtype(data1, "frameshift"))
+    data3 = selectsmall(selectsmall(selectsmall(selectsmall(df,"ExAC_AF",0.01),"ExAC_EAS_AF",0.01),"gnomAD_genome_EAS",0.01),"In_house_freq",0.05)
+    data4 = selectbig(data3, "VAF", 29)
+    data5 = selectbig(data4, "CADD", threshold)
+    ##data5 = (congrade(data4,"Mutationtatser_prediction","A")).append(data4[data4["Mutationtatser_prediction"].str.contains("D")])
+    ##data7 = congrade(data6,"LRT_prediction","D").append(data6[data6["LRT_prediction"].str.contains("U")])
+    ##data8 = congrade(data7, "Polyphen2_HDIV_pred", "D").append(data7[data7["Polyphen2_HDIV_pred"].str.contains("P")])
+    ##data9 = congrade(data8, "Polyphen2_HVAR_pred", "D").append(data8[data8["Polyphen2_HVAR_pred"].str.contains("P")])
+    ##data10 = congrade(data9, "SIFT_prediction", "D")
+    return data5
+
+
+
+
+
+def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    df = df[:1]
+    ##df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
-    final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
+    final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10','Patho_rank_CADD_15','Patho_rank_CADD_20','Symbol'])
 
     for i in range(len(df)):
         try:
@@ -75,24 +120,33 @@ def main_1():
             variation = pd.read_csv(case_id_tsv_file_dict[case_id], sep="\t")
             variation_gene_name = variation['Gene_name']
 
-            #求基因的交集
+
+
+
+            #仅取TSV基因的交集排序
             intersect_gene = pheno_result[pheno_result.gene_symbol.isin(variation_gene_name)]
             intersect_gene_rank = {}
             for j, v in enumerate(intersect_gene["gene_symbol"]):
-                intersect_gene_rank[v] = j
+                intersect_gene_rank[v] = j ##写出rank
             filtered_result = variation[variation.Gene_name.isin(intersect_gene['gene_symbol'])]
             filtered_result['pheno_rank'] = [pheno_gene_rank[gene] for gene in filtered_result['Gene_name']]
             filtered_result['intersect_rank'] = [intersect_gene_rank[gene] for gene in filtered_result['Gene_name']]
             filtered_result['CaseID'] = [case_id for gene in filtered_result['Gene_name']]
-            ##filtered_result.to_csv(f"output/{case_id}.csv")
 
-            #求致病性突变过滤
-            #filtered_patho_result= filtered_result[filtered_result["CADD"]>=20]
-            #print(filtered_patho_result)
+
+            #求致病性突变过滤后的基因排序
+            for w in (10,15,20):
+                variation_p = patho_filter_n(variation,w)
+                patho_gene_name = variation_p['Gene_name']
+                patho_gene = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name)]
+                patho_gene_rank_10 = {}
+                for j, v in enumerate(patho_gene["gene_symbol"]):
+                    patho_gene_rank_10[v] = j  ##写出rank
+
 
             #final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
             final_big_table.loc[i] = [case_id, hpo_id, pheno_gene_rank.get(symbol, 'NA'),
-                                      intersect_gene_rank.get(symbol, 'NA'), symbol]
+                                      intersect_gene_rank.get(symbol, 'NA'),patho_gene_rank_10.get(symbol,'NA') ,patho_gene_rank_15.get(symbol,'NA'),patho_gene_rank_20.get(symbol,'NA'),symbol]
 
             #print(lines)
             print(case_id)
@@ -100,13 +154,13 @@ def main_1():
         except Exception as e:
             print(e)
     print(f"final result length is: {len(final_big_table)}")
-    final_big_table.to_csv("ground_truth_symbol.csv")
+    final_big_table.to_csv("strategy _compare_3.csv")
 
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    main_1()
+    main()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
