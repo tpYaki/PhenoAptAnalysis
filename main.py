@@ -94,7 +94,7 @@ def patho_filter_n(df,threshold):
 def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    #df = df[:1]
+    ##df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
     final_big_table = pd.DataFrame(
         columns=['CaseID', 'hpo_id', 'Symbol', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10',
@@ -104,13 +104,14 @@ def main():
         try:
             case_id = df.loc[i, 'CaseID']
             hpo_id = df.loc[i, 'hpo_id']
-            hpo_id_input = ','.join([f"'{str(k)}'" for k in hpo_id.split(";")])
+            hpo_id_input = pd.Series( hpo_id.split(";"))
             symbol = df.loc[i, "Symbol"]
-            weight_1 = ','.join([str(1) for k in range(len(hpo_id.split(";")))])
+            ##weight_1 = ','.join([str(1) for k in range(len(hpo_id.split(";")))])
             ##command = f"[{hpo_id_input}], weight=[{weight}], n=1000"
             ##print(i, command)
             client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
-            pheno_result = (client.rank_gene(phenotype=hpo_id_input,weight=weight_1,n=5000)).rank_frame
+            pheno_result = (client.rank_gene(phenotype=hpo_id_input,n=5000)).rank_frame
+            print(hpo_id_input)
             print(pheno_result)
             pheno_gene_rank = {}
             for j, v in enumerate(pheno_result["gene_symbol"]):
