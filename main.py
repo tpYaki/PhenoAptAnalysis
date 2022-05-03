@@ -87,6 +87,10 @@ def patho_filter_n(df,threshold):
     ##data10 = congrade(data9, "SIFT_prediction", "D")
     return data5
 
+def getvcf(case_id):
+    dir = get_case_id_file_map(case_id)
+    command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o out.vcf \ conda deactivate"
+
 
 
 
@@ -104,13 +108,13 @@ def main():
         try:
             case_id = df.loc[i, 'CaseID']
             hpo_id = df.loc[i, 'hpo_id']
-            hpo_id_input = pd.Series( hpo_id.split(";"))
+            hpo_id_input = [k for k in hpo_id.split(";")]
             symbol = df.loc[i, "Symbol"]
-            ##weight_1 = ','.join([str(1) for k in range(len(hpo_id.split(";")))])
+            weight_1 = [1 for k in range(len(hpo_id.split(";")))]
             ##command = f"[{hpo_id_input}], weight=[{weight}], n=1000"
             ##print(i, command)
             client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
-            pheno_result = (client.rank_gene(phenotype=hpo_id_input,n=5000)).rank_frame
+            pheno_result = (client.rank_gene(phenotype=hpo_id_input,weight=weight_1,n=5000)).rank_frame
             print(hpo_id_input)
             print(pheno_result)
             pheno_gene_rank = {}
@@ -132,7 +136,7 @@ def main():
             filtered_result['pheno_rank'] = [pheno_gene_rank[gene] for gene in filtered_result['Gene_name']]
             filtered_result['intersect_rank'] = [intersect_gene_rank[gene] for gene in filtered_result['Gene_name']]
             filtered_result['CaseID'] = [case_id for gene in filtered_result['Gene_name']]
-
+            filtered_result.to_csv(f"output/{case_id}.csv")
 
             # #求致病性突变过滤后的基因排序
             # for w in (10,15,20)
@@ -177,8 +181,6 @@ def main():
     print(f"final result length is: {len(final_big_table)}")
     final_big_table.to_csv("strategy _compare_3.csv")
 
-def picture(df):
-    df = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
 
 
 # Press the green button in the gutter to run the script.
