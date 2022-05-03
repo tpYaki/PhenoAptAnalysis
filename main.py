@@ -87,18 +87,20 @@ def patho_filter_n(df,threshold):
     ##data10 = congrade(data9, "SIFT_prediction", "D")
     return data5
 
-def getvcf(case_id):
-    dir = get_case_id_file_map(case_id)
-    command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o out.vcf \ conda deactivate"
-
-
+def getvcf(case_id,dir):
+    # command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/VCF/{case_id}.vcf \ conda deactivate"
+    command = f"conda init zsh \conda activate bcftools"
+    print(command)
+    os.system(command)
+    print(f" done")
+    return True
 
 
 
 def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    ##df = df[:1]
+    df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
     final_big_table = pd.DataFrame(
         columns=['CaseID', 'hpo_id', 'Symbol', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10',
@@ -107,12 +109,14 @@ def main():
     for i in range(len(df)):
         try:
             case_id = df.loc[i, 'CaseID']
+            if case_id not in case_id_tsv_file_dict:
+                continue
+            getvcf(case_id,case_id_tsv_file_dict[case_id])
+
             hpo_id = df.loc[i, 'hpo_id']
             hpo_id_input = [k for k in hpo_id.split(";")]
             symbol = df.loc[i, "Symbol"]
             weight_1 = [1 for k in range(len(hpo_id.split(";")))]
-            ##command = f"[{hpo_id_input}], weight=[{weight}], n=1000"
-            ##print(i, command)
             client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
             pheno_result = (client.rank_gene(phenotype=hpo_id_input,weight=weight_1,n=5000)).rank_frame
             print(hpo_id_input)
@@ -122,8 +126,7 @@ def main():
                 pheno_gene_rank[v] = j
             print(pheno_gene_rank)
 
-            if case_id not in case_id_tsv_file_dict:
-                continue
+
             variation = pd.read_csv(case_id_tsv_file_dict[case_id], sep="\t")
             variation_gene_name = variation['Gene_name']
 
