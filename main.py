@@ -88,15 +88,26 @@ def getvcf(case_id,dir):
     # command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/VCF/{case_id}.vcf \ conda deactivate"
     df = pd.read_csv(dir, sep="\t")
     # df2 = pd.dataframe(columns=["CHROM", "POS", "Rs_ID", "REF", "ALT","QUAL","FILTER","INFO"])
-    QUAL = pd.DataFrame(columns=["QUAL"])
-    INFO = pd.DataFrame(columns=["INFO"])
 
-    for i in range(len(df)-1):
-        QUAL.loc[i]="."
-        INFO.loc[i]="."
+    dfx = pd.DataFrame()
+    for i in range(len(df)):
+        if df.at[i, 'ALT'] == '-':
+            print(i, 'ALT', df.at[i, 'ALT'])
+        else:
+            if df.at[i, 'REF'] == '-':
+                print(i, 'REF', df.at[i, 'REF'])
+            else:
+                dfx=pd.concat([dfx, df.loc[i]],axis='columns')
+    dfx = dfx.T
+    for j in range(len(dfx)):
+        if dfx.at[j,'FILTER']!= "-":
+            continue
+        ##dfx.at[j,'FILTER'] = '.'
+
+    QUAL = pd.DataFrame({'QUAL':pd.Series(['.' for k in range(len(dfx))])})
+    INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
-    print(QUAL)
-    df2 = pd.concat([df[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,df['FILTER'],INFO],axis=1)
+    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO],axis=1)
     df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT','QUAL','FILTER','INFO']
     df2.to_csv(f"./VCF/{case_id}.txt", sep="\t", index=False)
     command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {pwd}VCF/{case_id}.txt | bcftools view -o {pwd}VCF/{case_id}.vcf"
@@ -108,18 +119,49 @@ def getvcf(case_id,dir):
 def generatevcf():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
-    ##df = df[:1]
+    df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
-    final_big_table = pd.DataFrame(
-        columns=['CaseID', 'hpo_id', 'Symbol', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10',
-                 'Patho_rank_CADD_15', 'Patho_rank_CADD_20'])
-
     for i in range(len(df)):
         try:
             case_id = df.loc[i, 'CaseID']
             if case_id not in case_id_tsv_file_dict:
                 continue
             getvcf(case_id, case_id_tsv_file_dict[case_id])
+        except Exception as e:
+            print(e)
+
+import yaml
+def getyml(case_id_file, hpo_id_input):
+    pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
+    with open('./yml/test-analysis-exome.yml','r') as f:
+        config = yaml.safe_load(f)
+        config['analysis']['vcf'] = f'{pwd}VCF/{case_id_file}.vcf'
+        config['analysis']['hpoIds'] = hpo_id_input # add the command as a list for the correct yaml
+        config['outputOptions']['outputFormats']=['TSV_GENE']
+        config['outputOptions']['outputPrefix'] = f'{pwd}Exomiseroutput/{case_id_file}'
+        ##del config['hostname']   # del the 'hostname' key from config
+        print(config['analysis']['hpoIds'])
+
+    with open(f'./yml/{case_id_file}.yml',"w") as f: # open the file in append mode
+        f.truncate(0)
+        yaml.dump(config, f) ##default_flow_style=Faulse
+
+def generateyml():
+    df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
+    print(f"{len(df)}")
+    df = df[:1]
+    case_id_tsv_file_dict = get_case_id_file_map(case_ids)
+    for i in range(len(df)):
+        try:
+            case_id = df.loc[i, 'CaseID']
+            if case_id not in case_id_tsv_file_dict:
+                print(f"{i} not in dropbox")
+                continue
+
+            hpo_id = df.loc[i, 'hpo_id']
+            hpo_id_input = [k for k in hpo_id.split(";")]
+
+            getyml(case_id,hpo_id_input) ##用map到的所有文件名case_id_file称生成yml,与main中的case_id一个意思
         except Exception as e:
             print(e)
 
@@ -136,11 +178,14 @@ def main():
         try:
             case_id = df.loc[i, 'CaseID']
             if case_id not in case_id_tsv_file_dict:
+                print(f"{i} not in dropbox")
                 continue
 
             hpo_id = df.loc[i, 'hpo_id']
             hpo_id_input = [k for k in hpo_id.split(";")]
             symbol = df.loc[i, "Symbol"]
+
+            ## PhenoApt排序
             weight_1 = [1 for k in range(len(hpo_id.split(";")))]
             client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
             pheno_result = (client.rank_gene(phenotype=hpo_id_input,weight=weight_1,n=5000)).rank_frame
@@ -213,6 +258,7 @@ def main():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    main()
+    generatevcf()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+    # See PyCharm help at https://www.jetbrains.com/help/pycharm/
