@@ -88,7 +88,6 @@ def getvcf(case_id,dir):
     # command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/VCF/{case_id}.vcf \ conda deactivate"
     df = pd.read_csv(dir, sep="\t")
     # df2 = pd.dataframe(columns=["CHROM", "POS", "Rs_ID", "REF", "ALT","QUAL","FILTER","INFO"])
-
     dfx = pd.DataFrame()
     for i in range(len(df)):
         if df.at[i, 'ALT'] == '-':
@@ -108,7 +107,7 @@ def getvcf(case_id,dir):
     INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
     df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO],axis=1)
-    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT','QUAL','FILTER','INFO']
+    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']
     df2.to_csv(f"./VCF/{case_id}.txt", sep="\t", index=False)
     command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {pwd}VCF/{case_id}.txt | bcftools view -o {pwd}VCF/{case_id}.vcf"
     print(command)
@@ -139,7 +138,7 @@ def getyml(case_id_file, hpo_id_input):
         config['analysis']['hpoIds'] = hpo_id_input # add the command as a list for the correct yaml
         config['outputOptions']['outputFormats']=['TSV_GENE']
         config['outputOptions']['outputPrefix'] = f'{pwd}Exomiseroutput/{case_id_file}'
-        del config['inheritanceModes']   # del the 'hostname' key from config
+        ## del config['inheritanceModes']   # del the 'hostname' key from config
         print(config['analysis']['hpoIds'])
 
     with open(f'./yml/{case_id_file}.yml',"w") as f: # open the file in append mode
