@@ -97,12 +97,12 @@ def getvcf(case_id,dir):
             if df.at[i, 'REF'] == '-':
                 print(i, 'REF', df.at[i, 'REF'])
             else:
-                dfx=pd.concat([dfx, df.loc[i]],axis='columns')
-    dfx = dfx.T
+                dfx=pd.concat([dfx, df.loc[i]],axis='columns') ##删掉indel
+    dfx = (dfx.T).reset_index(drop=True)
     for j in range(len(dfx)):
-        if dfx.at[j,'FILTER']!= "-":
+        if str(dfx.at[j,'FILTER']) != '-':
             continue
-        ##dfx.at[j,'FILTER'] = '.'
+        dfx.at[j,'FILTER'] = '.'
 
     QUAL = pd.DataFrame({'QUAL':pd.Series(['.' for k in range(len(dfx))])})
     INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
@@ -139,7 +139,7 @@ def getyml(case_id_file, hpo_id_input):
         config['analysis']['hpoIds'] = hpo_id_input # add the command as a list for the correct yaml
         config['outputOptions']['outputFormats']=['TSV_GENE']
         config['outputOptions']['outputPrefix'] = f'{pwd}Exomiseroutput/{case_id_file}'
-        ##del config['hostname']   # del the 'hostname' key from config
+        del config['inheritanceModes']   # del the 'hostname' key from config
         print(config['analysis']['hpoIds'])
 
     with open(f'./yml/{case_id_file}.yml',"w") as f: # open the file in append mode
@@ -258,7 +258,7 @@ def main():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    generatevcf()
+    generateyml()
 
 
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
