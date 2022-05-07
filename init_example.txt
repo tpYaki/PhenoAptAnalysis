@@ -1,0 +1,16 @@
+cat ~/.ssh/id_rsa.pub 
+git clone git@github.com:tpYaki/PhenoAptAnalysis.git
+git checkout -b zh-dev
+ls
+cd PhenoAptAnalysis/
+ls
+git checkout -b zh-dev
+ls
+vi ReadMe.md
+ls
+git push commit -m "init commit"
+git commit -m "init commit"
+git add -A
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple 
