@@ -195,7 +195,6 @@ def main():
                 pheno_gene_rank[v] = j
             print(pheno_gene_rank)
 
-
             variation = pd.read_csv(case_id_tsv_file_dict[case_id], sep="\t")
             variation_gene_name = variation['Gene_name']
 
