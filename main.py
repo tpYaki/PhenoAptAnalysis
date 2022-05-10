@@ -8,6 +8,7 @@ import pandas as pd
 import xlrd
 from phenoapt import PhenoApt
 import numpy as np
+import subprocess
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -88,28 +89,51 @@ def getvcf(case_id,dir):
     # command = f"conda activate bcftools \ awk -f script.awk {dir}  |bcftools view -o /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/VCF/{case_id}.vcf \ conda deactivate"
     df = pd.read_csv(dir, sep="\t")
     # df2 = pd.dataframe(columns=["CHROM", "POS", "Rs_ID", "REF", "ALT","QUAL","FILTER","INFO"])
-    dfx = pd.DataFrame()
+    dfx = df
     for i in range(len(df)):
-        if df.at[i, 'ALT'] == '-':
+        # if df.at[i, 'ALT'] == '-':
+        #     print(i, 'ALT', df.at[i, 'ALT'])
+        # else:
+        #     if df.at[i, 'REF'] == '-':
+        #         print(i, 'REF', df.at[i, 'REF'])
+        #     else:
+        #         dfx=pd.concat([dfx, df.loc[i]],axis='columns') ##删掉indel
+
+        ##补充indel的REF和ALT
+        if df.at[i, 'ALT'] == '-': ##deletion
             print(i, 'ALT', df.at[i, 'ALT'])
+            pos=int(df.at[i, 'POS'])
+            chr=df.at[i, 'CHR']
+            cmd=f'source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx /Users/liyaqi/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos-1}-{pos-1}'
+            result = subprocess.getoutput(cmd)
+            dfx.at[i, 'ALT']=result.split('\n')[1]
+            dfx.at[i, 'REF']=result.split('\n')[1]+df.at[i, 'REF']
+            dfx.at[i, 'POS']=pos-1
         else:
-            if df.at[i, 'REF'] == '-':
+            if df.at[i, 'REF'] == '-': ## insertion
                 print(i, 'REF', df.at[i, 'REF'])
-            else:
-                dfx=pd.concat([dfx, df.loc[i]],axis='columns') ##删掉indel
-    dfx = (dfx.T).reset_index(drop=True)
+                pos = int(df.at[i, 'POS'])
+                chr = df.at[i, 'CHR']
+                cmd = f'source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx /Users/liyaqi/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
+                result = subprocess.getoutput(cmd)
+                dfx.at[i, 'REF'] = result.split('\n')[1]
+                dfx.at[i, 'ALT'] = result.split('\n')[1]+df.at[i, 'ALT']
+                dfx.at[i, 'POS'] = pos - 1
+
     for j in range(len(dfx)):
         if str(dfx.at[j,'FILTER']) != '-':
             continue
         dfx.at[j,'FILTER'] = '.'
 
-    QUAL = pd.DataFrame({'QUAL':pd.Series(['.' for k in range(len(dfx))])})
+    QUAL = pd.DataFrame({'QUAL':pd.Series([100 for k in range(len(dfx))])})
     INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
-    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO],axis=1)
-    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']
+
+    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO],dfx['FORMAT'],axis=1)
+    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO','FORMAT']
     df2.to_csv(f"./VCF/{case_id}.txt", sep="\t", index=False)
-    command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {pwd}VCF/{case_id}.txt | bcftools view -o {pwd}VCF/{case_id}.vcf"
+
+    command = f"rm {pwd}VCF/{case_id}.vcf && source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {pwd}VCF/{case_id}.txt | bcftools view -o {pwd}VCF/{case_id}.vcf"
     print(command)
     os.system(command)
     print(f" done")
@@ -122,12 +146,23 @@ def generatevcf():
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
     for i in range(len(df)):
         try:
-            case_id = df.loc[i, 'CaseID']
-            if case_id not in case_id_tsv_file_dict:
-                continue
-            getvcf(case_id, case_id_tsv_file_dict[case_id])
+            case_id = case_ids[i]
+            # if case_id not in case_id_tsv_file_dict:
+            #     continue
+            # print(f'{case_id}')
+            # getvcf(case_id, case_id_tsv_file_dict[case_id])
+            # print('done')
+
+            print(f'{case_id}')
+            grepvcf(case_id)
+            print('done')
         except Exception as e:
             print(e)
+
+def grepvcf(case_id):
+    pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
+    cmd=f'grep {case_id} {pwd}scoliosis_2021Sep.refseq.e0.001.i0.001.tsv >{pwd}realVCF/{case_id}-grand.tsv'
+    os.system(cmd)
 
 import yaml
 def getyml(case_id_file, hpo_id_input):
@@ -144,6 +179,7 @@ def getyml(case_id_file, hpo_id_input):
     with open(f'./yml/{case_id_file}.yml',"w") as f: # open the file in append mode
         f.truncate(0)
         yaml.dump(config, f) ##default_flow_style=Faulse
+
 
 def generateyml():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
@@ -256,7 +292,7 @@ def main():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    generateyml()
+    generatevcf()
 
 
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
