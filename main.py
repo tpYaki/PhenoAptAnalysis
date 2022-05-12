@@ -9,6 +9,7 @@ import xlrd
 from phenoapt import PhenoApt
 import numpy as np
 import subprocess
+import re
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -27,6 +28,14 @@ def read_diagnose_xlsx(path):
     case_ids = df['CaseID']
     print(case_ids)
     return df, case_ids
+
+def read_gvcf_diagnosis_xlsx(path):
+    wb = xlrd.open_workbook(path)
+    sh = wb.sheet_by_name('Sheet1')
+    data = [sh.row_values(i) for i in range(1, sh.nrows)]
+    df = pd.DataFrame(data=data, columns=sh.row_values(0))
+    return df
+
 
 #获取case_id与相应的tsv文件路径的映射关系
 def get_case_id_file_map(case_ids):
@@ -129,7 +138,7 @@ def getvcf(case_id,dir):
     INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
 
-    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO],dfx['FORMAT'],axis=1)
+    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']],QUAL,dfx['FILTER'],INFO,dfx['FORMAT']],axis=1)
     df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO','FORMAT']
     df2.to_csv(f"./VCF/{case_id}.txt", sep="\t", index=False)
 
@@ -140,36 +149,87 @@ def getvcf(case_id,dir):
     return True
 
 def generatevcf():
-    df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
+    df, case_ids= read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
     df = df[:1]
     case_id_tsv_file_dict = get_case_id_file_map(case_ids)
     for i in range(len(df)):
         try:
             case_id = case_ids[i]
-            # if case_id not in case_id_tsv_file_dict:
-            #     continue
-            # print(f'{case_id}')
-            # getvcf(case_id, case_id_tsv_file_dict[case_id])
-            # print('done')
-
+            if case_id not in case_id_tsv_file_dict:
+                continue
             print(f'{case_id}')
-            grepvcf(case_id)
+            getvcf(case_id, case_id_tsv_file_dict[case_id])
             print('done')
         except Exception as e:
             print(e)
 
-def grepvcf(case_id):
+def realtsvtovcf():  ##gVCF-scolisosis
+    df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+    sequence_ids = df['sequence ID']
+    print(f"{len(df)}")
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
-    cmd=f'grep {case_id} {pwd}scoliosis_2021Sep.refseq.e0.001.i0.001.tsv >{pwd}realVCF/{case_id}-grand.tsv'
-    os.system(cmd)
+    ##df = df[:1]
+    for i in range(len(df)):
+        sequence_id = sequence_ids[i]
+        print(f'{i}, {sequence_id}')
+        cmd = f'cat {pwd}mutation_id.tsv |grep -n {sequence_id} | cut -d : -f 1 > {pwd}realVCF/{sequence_id}_row_number.txt'
+        os.system(cmd)
+        print('row done')
+
+    ###找到非空文件
+    init_list = subprocess.getoutput('zsh /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/non_empty.sh')
+    init_list = str(init_list).split('\n')
+    ## 从scoliosis大表里拉出VCF
+
+    print(len(init_list))
+    for sequence_id in init_list:
+        case_id = sequence_id.split('-')[0]
+        cmd = f'awk -f {pwd}greprowline.awk {pwd}realtsv/{sequence_id}_row_number.txt {pwd}scoliosis_2021Sep.refseq.e0.001.i0.001.tsv >  {pwd}tsvtoVCF/{case_id}.tsv'
+        os.system(cmd)
+        print(f"{sequence_id}tsv done")
+
+
+def generaterealvcf():  ##gVCF-scolisosis
+    pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
+    init_list = subprocess.getoutput('zsh /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/non_empty.sh')
+    init_list = str(init_list).split('\n')
+    ##init_list = init_list[:1]
+    m = 0
+    for sequence_id in init_list:
+        case_id = sequence_id.split('-')[0]
+        dfx = pd.read_csv(f'{pwd}tsvtoVCF/{case_id}.tsv', sep='\t', header=None)
+        dfx[['CHR', 'POS','REF','ALT']] = dfx[0].str.split('_', 0, expand=True)
+        dfx_chr={}
+        dfx_genotype = {}
+        for i in range(len(dfx)):
+            dfx_chr[i]= dfx.at[i,'CHR'][3:]
+            ids = [k for k in dfx.at[i, 3].split(';')]
+            genotypes = [k for k in dfx.at[i, 5].split(';')]
+            for k in range(len(ids)):
+                if ids[k] == sequence_id:
+                    dfx_genotype[i]=genotypes[k]
+        dfx_chr=pd.Series(dfx_chr)
+        dfx_genotype = pd.Series(dfx_genotype)
+        QUAL = pd.DataFrame({'QUAL': pd.Series(['.' for k in range(len(dfx))])})
+        INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
+        FILTER = pd.DataFrame({'INFO': pd.Series(['PASS' for k in range(len(dfx))])})
+        df2 = pd.concat([dfx_chr,dfx[['POS', 26, 'REF', 'ALT']],QUAL,FILTER,INFO,dfx[4],dfx_genotype],axis=1)
+        df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT','SAMPLE']
+        df2.to_csv(f"./realVCF/{case_id}.txt", sep="\t", index=False)
+        command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {pwd}realVCF/{case_id}.txt | bcftools view -o {pwd}realVCF/{case_id}.vcf"
+        print(command)
+        os.system(command)
+        print(f'{case_id}, NO.{m}, done')
+        m = m + 1
+
 
 import yaml
 def getyml(case_id_file, hpo_id_input):
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
     with open('./yml/test-analysis-exome.yml','r') as f:
         config = yaml.safe_load(f)
-        config['analysis']['vcf'] = f'{pwd}VCF/{case_id_file}.vcf'
+        config['analysis']['vcf'] = f'{pwd}realVCF/{case_id_file}.vcf'
         config['analysis']['hpoIds'] = hpo_id_input # add the command as a list for the correct yaml
         config['outputOptions']['outputFormats']=['TSV_GENE']
         config['outputOptions']['outputPrefix'] = f'{pwd}Exomiseroutput/{case_id_file}'
@@ -199,6 +259,47 @@ def generateyml():
             getyml(case_id,hpo_id_input) ##用map到的所有文件名case_id_file称生成yml,与main中的case_id一个意思
         except Exception as e:
             print(e)
+
+def getrealyml(case_id_file, hpo_id_input):  ##gVCF-scolisosis
+    pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
+    with open('./realyml/test-analysis-exome.yml','r') as f:
+        config = yaml.safe_load(f)
+        config['analysis']['vcf'] = f'{pwd}realVCF/{case_id_file}.vcf'
+        config['analysis']['hpoIds'] = hpo_id_input # add the command as a list for the correct yaml
+        config['outputOptions']['outputFormats']=['TSV_GENE']
+        config['outputOptions']['outputPrefix'] = f'{pwd}Exomiseroutput/{case_id_file}'
+        ## del config['inheritanceModes']   # del the 'hostname' key from config
+        print(config['analysis']['hpoIds'])
+
+    with open(f'./realyml/{case_id_file}.yml',"w") as f: # open the file in append mode
+        f.truncate(0)
+        yaml.dump(config, f) ##default_flow_style=Faulse
+
+def realVDFYML(): ##gVCF-scolisosis
+    df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+    pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
+    init_list = subprocess.getoutput('zsh /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/non_empty.sh')
+    init_list = str(init_list).split('\n')
+    ##init_list = init_list[:1]
+    dfa = pd.DataFrame()
+    m = 0
+    for sequence_id in init_list:
+        for i in range(len(df)):
+            if df.at[i, 'sequence ID'] == sequence_id:
+                case_id = sequence_id.split('-')[0]
+                dfa.at[case_id, 'HPO'] = df.at[i, 'HPO']
+                dfa.at[case_id, 'Symbol'] = df.at[i, 'Symbol']
+    dfa = dfa.rename_axis('case_id').reset_index(level=0)
+    print(len(dfa))
+    ##dfa.to_csv('/Users/liyaqi/Documents/生信/gVCF-2022-确诊-有VCF.csv') ##dfa是能在scolisis大表中找到VCF条目的ID-HPO-Symbol大表
+    for t in range(len(dfa)):
+        hpo_id = dfa.loc[t, 'HPO'][2:-2]
+        hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+        getrealyml(dfa.at[t,'case_id'], hpo_id_input)
+        case_id = dfa.at[t,'case_id']
+        os.system(f'cd /Users/liyaqi/Downloads/exomiser-cli-12.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-12.1.0.jar -analysis /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/realyml/{case_id}.yml')
+
+
 
 def main():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
@@ -274,6 +375,10 @@ def main():
             patho_gene_rank_20 = {}
             for j, v in enumerate(patho_gene_20["gene_symbol"]):
                 patho_gene_rank_20[v] = j
+
+            ##EXomiser排序
+
+
             final_big_table.loc[i] = [case_id, hpo_id, symbol, pheno_gene_rank.get(symbol, 'NA'),
                                       intersect_gene_rank.get(symbol, 'NA'), patho_gene_rank_10.get(symbol, 'NA'), patho_gene_rank_15.get(symbol, 'NA'),patho_gene_rank_20.get(symbol, 'NA')] ##写出rank
 
@@ -292,7 +397,7 @@ def main():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    generatevcf()
 
+    realVDFYML()
 
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
