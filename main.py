@@ -291,17 +291,17 @@ def realVDFYML(): ##gVCF-scolisosis
                 dfa.at[case_id, 'Symbol'] = df.at[i, 'Symbol']
     dfa = dfa.rename_axis('case_id').reset_index(level=0)
     print(len(dfa))
-    ##dfa.to_csv('/Users/liyaqi/Documents/生信/gVCF-2022-确诊-有VCF.csv') ##dfa是能在scolisis大表中找到VCF条目的ID-HPO-Symbol大表
+    dfa.to_csv('/Users/liyaqi/Documents/生信/gVCF-2022-确诊-有VCF.csv') ##dfa是能在scolisis大表中找到VCF条目的ID-HPO-Symbol大表
     for t in range(len(dfa)):
         hpo_id = dfa.loc[t, 'HPO'][2:-2]
         hpo_id_input = [str(k) for k in hpo_id.split("', '")]
         getrealyml(dfa.at[t,'case_id'], hpo_id_input)
         case_id = dfa.at[t,'case_id']
-        os.system(f'cd /Users/liyaqi/Downloads/exomiser-cli-12.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-12.1.0.jar -analysis /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/realyml/{case_id}.yml')
+        ##os.system(f'cd /Users/liyaqi/Downloads/exomiser-cli-12.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-12.1.0.jar -analysis /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/realyml/{case_id}.yml') ##需要跑exomiser的时候打开
 
 
 
-def main():
+def main_1():
     df, case_ids = read_diagnose_xlsx('/Users/liyaqi/Documents/生信/Inhouse_cohorts_genes_Version_8_MRR_诊断.xlsx')
     print(f"{len(df)}")
     ##df = df[:1]
@@ -346,15 +346,6 @@ def main():
             filtered_result['CaseID'] = [case_id for gene in filtered_result['Gene_name']]
             filtered_result.to_csv(f"output/{case_id}.csv")
 
-            # #求致病性突变过滤后的基因排序
-            # for w in (10,15,20)
-            #     variation_p_w = patho_filter_n(variation,w)
-            #     patho_gene_name_w = variation_p_w['Gene_name']
-            #     patho_gene_w = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_w)]
-            #     patho_gene_rank_w = {}
-            #     for j, v in enumerate(patho_gene_w["gene_symbol"]):
-            #         patho_gene_rank_w[v] = j
-            #     dict(name=f"patho_gene_rank_{w}")=patho_gene_rank_w
             variation_p_10 = patho_filter_n(variation, 10)
             patho_gene_name_10 = variation_p_10['Gene_name']
             patho_gene_10 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_10)]
@@ -376,16 +367,9 @@ def main():
             for j, v in enumerate(patho_gene_20["gene_symbol"]):
                 patho_gene_rank_20[v] = j
 
-            ##EXomiser排序
-
-
             final_big_table.loc[i] = [case_id, hpo_id, symbol, pheno_gene_rank.get(symbol, 'NA'),
                                       intersect_gene_rank.get(symbol, 'NA'), patho_gene_rank_10.get(symbol, 'NA'), patho_gene_rank_15.get(symbol, 'NA'),patho_gene_rank_20.get(symbol, 'NA')] ##写出rank
 
-
-            #final_big_table = pd.DataFrame(columns=['CaseID', 'hpo_id', 'phenoapt_rank', 'intersect_rank', 'Symbol'])
-
-            #print(lines)
             print(case_id)
             print(f"{i} done")
         except Exception as e:
@@ -393,11 +377,82 @@ def main():
     print(f"final result length is: {len(final_big_table)}")
     final_big_table.to_csv("strategy _compare_3.csv")
 
+def main_2():
+    df = pd.read_csv('/Users/liyaqi/Documents/生信/gVCF-2022-确诊-有VCF.csv')
+    print(f"{len(df)}")
+    ##df = df[:1]
+    final_big_table = pd.DataFrame(
+        columns=['CaseID', 'hpo_id', 'Symbol', 'phenoapt_rank', 'intersect_rank', 'Patho_rank_CADD_10',
+                 'Patho_rank_CADD_15', 'Patho_rank_CADD_20','Exomiser'])
+
+    for i in range(len(df)):
+        try:
+            hpo_id = df.loc[i, 'HPO'][2:-2]
+            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+            symbol = df.loc[i, "Symbol"]
+
+            ## PhenoApt排序
+            weight_1 = [1 for k in range(len(hpo_id.split(";")))]
+            client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+            pheno_result = (client.rank_gene(phenotype=hpo_id_input,weight=weight_1,n=5000)).rank_frame
+            print(hpo_id_input)
+            print(pheno_result)
+            pheno_gene_rank = {}
+            for j, v in enumerate(pheno_result["gene_symbol"]):
+                pheno_gene_rank[v] = j
+            print(pheno_gene_rank)
+            """
+
+            variation = pd.read_csv(case_id_tsv_file_dict[case_id], sep="\t")
+            variation_gene_name = variation['Gene_name']
+
+            #仅取TSV基因的交集排序
+            intersect_gene = pheno_result[pheno_result.gene_symbol.isin(variation_gene_name)]
+            intersect_gene_rank = {}
+            for j, v in enumerate(intersect_gene["gene_symbol"]):
+                intersect_gene_rank[v] = j ##写出rank
+            filtered_result = variation[variation.Gene_name.isin(intersect_gene['gene_symbol'])]
+            filtered_result['pheno_rank'] = [pheno_gene_rank[gene] for gene in filtered_result['Gene_name']]
+            filtered_result['intersect_rank'] = [intersect_gene_rank[gene] for gene in filtered_result['Gene_name']]
+            filtered_result['CaseID'] = [case_id for gene in filtered_result['Gene_name']]
+            filtered_result.to_csv(f"output/{case_id}.csv")
+
+            variation_p_10 = patho_filter_n(variation, 10)
+            patho_gene_name_10 = variation_p_10['Gene_name']
+            patho_gene_10 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_10)]
+            patho_gene_rank_10 = {}
+            for j, v in enumerate(patho_gene_10["gene_symbol"]):
+                patho_gene_rank_10[v] = j
+
+            variation_p_15 = patho_filter_n(variation, 15)
+            patho_gene_name_15 = variation_p_15['Gene_name']
+            patho_gene_15 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_15)]
+            patho_gene_rank_15 = {}
+            for j, v in enumerate(patho_gene_15["gene_symbol"]):
+                patho_gene_rank_15[v] = j
+
+            variation_p_20 = patho_filter_n(variation, 20)
+            patho_gene_name_20 = variation_p_20['Gene_name']
+            patho_gene_20 = pheno_result[pheno_result.gene_symbol.isin(patho_gene_name_20)]
+            patho_gene_rank_20 = {}
+            for j, v in enumerate(patho_gene_20["gene_symbol"]):
+                patho_gene_rank_20[v] = j
+
+            final_big_table.loc[i] = [case_id, hpo_id, symbol, pheno_gene_rank.get(symbol, 'NA'),
+                                      intersect_gene_rank.get(symbol, 'NA'), patho_gene_rank_10.get(symbol, 'NA'), patho_gene_rank_15.get(symbol, 'NA'),patho_gene_rank_20.get(symbol, 'NA')] ##写出rank
+
+            print(case_id)
+            print(f"{i} done")
+            """
+        except Exception as e:
+            print(e)
+    print(f"final result length is: {len(final_big_table)}")
+    final_big_table.to_csv("strategy _compare_3.csv")
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    realVDFYML()
+    main_2()
 
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
