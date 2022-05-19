@@ -170,6 +170,7 @@ def realtsvtovcf():  ##gVCF-scolisosis
     print(f"{len(df)}")
     pwd = "/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/"
     ##df = df[:1]
+    ## os.system(f'cat scoliosis_2021Sep.refseq.e0.001.i0.001.tsv | awk '{FS="\t";print $4}'') ##直接在terminal里输入就可以了
     for i in range(len(df)):
         sequence_id = sequence_ids[i]
         print(f'{i}, {sequence_id}')
