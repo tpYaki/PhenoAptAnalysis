@@ -7,4 +7,18 @@ strategy _compare_3.csv
 ground_truth_symbol.csv
 ground_truth_symbol_1.csv
 .DS_store
-
+scoliosis_gVCF_from_zs_updating
+scoliosis_gVCF_from_jeff
+scoliosis_filtered_tsv_dropbox
+scoliosis_2021Sep.refseq.e0.001.i0.001.tsv
+yaqi-sample-filtered.recode.vcf.gz
+realyml
+phrank
+example_real
+case_id_tsv_file.csv
+example for json.py
+greprow.awk
+head.tsv
+mutation_id.tsv
+script.awk
+yml
