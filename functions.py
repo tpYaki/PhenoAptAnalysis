@@ -19,6 +19,8 @@ import appscript
 import time
 import allel
 from pandas.testing import assert_frame_equal
+import networkx
+import obonet
 
 
 def file_prepare(cohort_df, pwd, filename,REVEL_thresh=[],CADD_thresh=[],refresh=False):
@@ -356,11 +358,13 @@ def getvcf_from_dropbox_tsv(pwd,case_id, dir, filename):
     QUAL = pd.DataFrame({'QUAL': pd.Series([100 for k in range(len(dfx))])})
     INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
     ## 假设一些无关紧要的格式信息，完成vcf必须的8列
-    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO, dfx['FORMAT']], axis=1)
-    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT']
+    # df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO, dfx['FORMAT']], axis=1)
+    # df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT']
+    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO], axis=1)
+    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']
     df2.to_csv(f"./{filename}/{case_id}.txt", sep="\t", index=False)  ##转化成vcf信息txt,存到对应数据版本file下
     vcfdir = f"{pwd}/{filename}"
-    command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}script.awk {vcfdir}/{case_id}.txt | bcftools view -o {vcfdir}/{case_id}.vcf"
+    command = f"source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}/script.awk {vcfdir}/{case_id}.txt | bcftools view -o {vcfdir}/{case_id}.vcf"
     ## awk加一些vcf的表头信息，再bcftools转化完成vcf
     print(command)
     os.system(command)
@@ -380,18 +384,19 @@ def genertatevcf_zs_diag_dropbox_tsv(pwd, filename, refresh=False):
                 print(f'no dropbox tsv file for {case_id}')
                 continue
         if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf'):
-            getvcf_from_dropbox_tsv(case_id, filedir, f'{filename}/dropbox2vcf')
+            getvcf_from_dropbox_tsv(pwd,case_id, filedir, f'{filename}/dropbox2vcf')
+            ##pwd,case_id, dir, filename
         else:
             if refresh:
-                getvcf_from_dropbox_tsv(case_id, filedir, f'{filename}/dropbox2vcf')
+                getvcf_from_dropbox_tsv(pwd,case_id, filedir, f'{filename}/dropbox2vcf')
         print('vcf done')
         if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf_revel'):
-            vcf_revel(f'{filename}/dropbox2vcf',
-                      f'{filename}/dropbox2vcf_revel', case_id)
+            vcf_revel(pwd,f'{filename}/dropbox2vcf',
+                      f'{filename}/dropbox2vcf_revel', case_id=case_id)
         else:
             if refresh:
                 vcf_revel(pwd,f'{filename}/dropbox2vcf',
-                          f'{filename}/dropbox2vcf_revel', case_id)
+                          f'{filename}/dropbox2vcf_revel', case_id=case_id)
         print('revel done')
 
 
@@ -415,6 +420,7 @@ def getyml_for_certain_ingeritance(case_id_file, hpo_id_input, dir, outputdir, i
         config['analysis']['vcf'] = f'{dir}/vcf/{case_id_file}.vcf'
         config['analysis']['hpoIds'] = hpo_id_input  # add the command as a list for the correct yaml
         config['outputOptions']['outputFormats'] = ['TSV_GENE']
+        # config['outputOptions']['outputFormats'] = ['HTML','TSV_GENE','TSV_VARIANT']
         config['outputOptions']['outputPrefix'] = f'{dir}/{outputdir}/{case_id_file}'
         config['analysis']['inheritanceModes'] = inheridict
         print(config['analysis']['hpoIds'])
@@ -438,7 +444,8 @@ def generateyml_zs_diag_zs_gVCF(df,pwd,filename,hpo,refresh=False):
     for i in range(len(df)):
         sequence_id = sequence_ids[i]
         sequence_id_file = f'{sequence_id}.vcf'
-        case_id = sequence_id.split('-')[0]
+        case_id = df.loc[i,'Blood ID']
+        #Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
         if sequence_id_file not in sequence_id_file_dict:
             print(f"{sequence_id_file} not in {filename}")
             n = n + 1
@@ -544,15 +551,20 @@ def generate_phenopaket_zs_diag_zs_gVCF(df,pwd,filename,hpo,refresh=False):
                     print(command)
                     os.system(command)
                     ##跑太慢了，所以hpo_id的结果还是用原来的
+
             else:
                 if f'{hpo}_LIRICALoutput' not in os.listdir(f'{pwd}/{filename}'):
-                    os.system(f'mkdir {pwd}/{filename}/{hpo}_LIRICALoutput && cp {pwd}/{filename}/LIRICALoutput/LIRICAL.jar {pwd}/{filename}/{hpo}_LIRICALoutput/LIRICAL.jar')
+                    os.system(f'mkdir {pwd}/{filename}/{hpo}_LIRICALoutput && cp {pwd}/{filename}/LIRICALoutput/LIRICAL.jar {pwd}/{filename}/{hpo}_LIRICALoutput/LIRICAL.jar && cp {pwd}/{filename}/LIRICALoutput/outputtodf.sh {pwd}/{filename}/{hpo}_LIRICALoutput/outputtodf.sh')
                 if (f'{sequence_id}.tsv'not in os.listdir(f'{pwd}/{filename}/{hpo}_LIRICALoutput/')) or refresh:
                     command = f'cd {pwd}/{filename}/{hpo}_LIRICALoutput && java -jar LIRICAL.jar phenopacket -p {dir_scoliosis_gVCF_from_zs}phenopacket/{sequence_id}_{hpo}.json -d /Users/liyaqi/Downloads/LIRICAL-1.3.4/data -e /Users/liyaqi/Downloads/exomiser-cli-12.1.0/data/1909_hg19 -x {sequence_id} --tsv'
                     print(command)
                     os.system(command)
-        os.system(f'bash {pwd}/{filename}/LIRICALoutput/outputtodf.sh')
+
         print(f'{m} case finish LIRICAL')
+    if hpo == 'hpo_id':
+        os.system(f'bash {pwd}/{filename}/LIRICALoutput/outputtodf.sh')
+    else:
+        os.system(f'bash {pwd}/{filename}/{hpo}_LIRICALoutput/outputtodf.sh')
 
 
 def generateped():
@@ -698,7 +710,7 @@ def phenolyzer(df,pwd,filename,hpo,refresh=False):
             hpo_txt_dir = f'{pwd}/{filename}/hpotxt/{case_id}_{hpo}.txt'
             ##如果有新case，还是用新产生的——hpo_id后缀的hpo.txt
             if (f'{case_id}.' not in ''.join(os.listdir(f'{pwd}/{filename}/phenolyzeroutput/'))) or refresh:
-                cmd_phenolyzer = f'cd  && perl disease_annotation.pl {hpo_txt_dir} -file -prediction -phenotype -logistic -out {pwd}/{filename}/phenolyzeroutput/{case_id} -addon DB_DISGENET_GENE_DISEASE_SCORE,DB_GAD_GENE_DISEASE_SCORE -addon_weight 0.25 && exit'
+                cmd_phenolyzer = f'cd /Users/liyaqi/Software/phenolyzer && perl disease_annotation.pl {hpo_txt_dir} -file -prediction -phenotype -logistic -out {pwd}/{filename}/phenolyzeroutput/{case_id} -addon DB_DISGENET_GENE_DISEASE_SCORE,DB_GAD_GENE_DISEASE_SCORE -addon_weight 0.25 && exit'
                 print(cmd_phenolyzer)
                 appscript.app('Terminal').do_script(cmd_phenolyzer)
                 time.sleep(30)
@@ -755,7 +767,7 @@ def phrank_rank(df, pwd, filename, mode, hpo='hpo_id', filter='candidategene_ens
 
 
 
-def phenoapt_rank(df,pwd,filename,hpo,refresh):
+def phenoapt_rank(df, pwd, filename, hpo, refresh=False, all_hpo_plus_weight=False, only_weight_hpo_weight=False):
     ## PhenoApt排序
     if 'phenoaptoutput' not in os.listdir(f'{pwd}/{filename}'):
         os.system(f'mkdir {pwd}/{filename}/phenoaptoutput')
@@ -763,17 +775,74 @@ def phenoapt_rank(df,pwd,filename,hpo,refresh):
         case_id = df['Blood ID'][i]
         if (f'{case_id}_{hpo}_phenoapt_rank.tsv' not in os.listdir(f'{pwd}/{filename}/phenoaptoutput')) or refresh:
             print('generating new phenoapt searching')
-            if df.loc[i, hpo][0] == '[':
-                hpo_id = df.loc[i, hpo][2:-2]
-                hpo_id_input = [k for k in hpo_id.split("', '")]
+            if hpo != 'Weight':
+                if df.loc[i, hpo][0] == '[':
+                    hpo_id = df.loc[i, hpo][2:-2]
+                    hpo_id_input = [k for k in hpo_id.split("', '")]
+                else:
+                    hpo_id = df.loc[i, hpo]
+                    hpo_id_input = [k for k in hpo_id.split(";")]
+                weight_1 = [1 for k in range(len(hpo_id_input))]
+                client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+                pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
+                pheno_result = pd.DataFrame(pheno_result)
+                pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv', sep='\t')
             else:
-                hpo_id = df.loc[i, hpo]
-                hpo_id_input = [k for k in hpo_id.split(";")]
-            weight_1 = [1 for k in range(len(hpo_id_input))]
-            client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
-            pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
-            pheno_result = pd.DataFrame(pheno_result)
-            pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',sep='\t')
+                intrisic_weight_df= pd.read_csv('/Users/liyaqi/Documents/生信/phenoapt/weight.csv')
+                intrisic_weight_df = intrisic_weight_df.set_index('hpo_id')
+                if df.loc[i, hpo][0] == '[':
+                    hpo_id = df.loc[i, hpo][2:-2]
+                    hpo_id_weight = [k for k in hpo_id.split("', '")]
+                else:
+                    hpo_id = df.loc[i, hpo]
+                    hpo_id_weight = [k for k in hpo_id.split(";")]
+
+                if all_hpo_plus_weight:
+                    ##有所有HPO，重点HPO加上非1的intrisic weight，如果没有找到对应weight，就加上5
+                    if df.loc[i, 'hpo_id'][0] == '[':
+                        hpo_id = df.loc[i, 'hpo_id'][2:-2]
+                        hpo_id_input = [k for k in hpo_id.split("', '")]
+                    else:
+                        hpo_id = df.loc[i, 'hpo_id']
+                        hpo_id_input = [k for k in hpo_id.split(";")]
+                    weight_dict = {}
+                    for k in hpo_id_input:
+                        if k not in hpo_id_weight:
+                            weight_dict[k]=1
+                        else:
+                            if k in intrisic_weight_df.index:
+                                weight_dict[k]=intrisic_weight_df.loc[k,'intrinsic_weight']
+                            else:
+                                weight_dict[k]=5
+                    weight_1 = [weight_dict[k] for k in hpo_id_input]
+                    client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+                    pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
+                    pheno_result = pd.DataFrame(pheno_result)
+                    pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',
+                                        sep='\t')
+                else:
+                    hpo_id_input = hpo_id_weight
+                    weight_dict={}
+                    if only_weight_hpo_weight:
+                        for k in hpo_id_input:
+                            if k in intrisic_weight_df.index:
+                                weight_dict[k] = intrisic_weight_df.loc[k, 'intrinsic_weight']
+                            else:
+                                weight_dict[k] = 5
+                            ##只有重点HPO，有加权
+                        weight_1 = [weight_dict[k] for k in hpo_id_input]
+                        client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+                        pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
+                        pheno_result = pd.DataFrame(pheno_result)
+                        pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_only_{hpo}_hpo_weight_phenoapt_rank.tsv',
+                                            sep='\t')
+                    else:
+                        ##只有重点HPO，没有有加权
+                        weight_1 = [1 for k in hpo_id_input]
+                        client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+                        pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
+                        pheno_result = pd.DataFrame(pheno_result)
+                        pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_only_{hpo}_hpo_no_weight_phenoapt_rank.tsv', sep='\t')
     print(f'phenoapt ready')
 
 
@@ -791,11 +860,36 @@ def getyml(case_id_file, hpo_id_input, dir):
         f.truncate(0)
         yaml.dump(config, f)  ##default_flow_style=Faulse
 
+def readobo(df,hpo,df_organ):
+    # Read the taxrank ontology
+    url = 'http://purl.obolibrary.org/obo/hp.obo'
+    graph = obonet.read_obo(url)
+    groupnames = df_organ['Term']
+    df[f'{hpo}_organ_system']= ""
+    df[f'{hpo}_organ_system_number'] = np.nan
+    for j in tqdm(range(len(df))):
+        groupname = []
+        if df.loc[j, hpo][0] == '[':
+            hpo_id = df.loc[j, hpo][2:-2]
+            hpo_id_input = [k for k in hpo_id.split("', '")]
+        else:
+            hpo_id = df.loc[j, hpo]
+            hpo_id_input = [k for k in hpo_id.split(";")]
+        for hpo_term in hpo_id_input:
+            searchgroup = networkx.descendants(graph,hpo_term)
+            groupname = groupname+[k for k in groupnames if k in searchgroup]
+        groupname = list(set(groupname))
+        df.loc[j,f'{hpo}_organ_system'] = "".join(['+'+name for name in groupname])[1:]
+        df.loc[j,f'{hpo}_organ_system_number'] = int(len(groupname))
+    print(df[f'{hpo}_organ_system'],df[f'{hpo}_organ_system_number'])
+    return df
+    # # Number of nodes
+    # print(len(graph))
+    # print(networkx.is_directed_acyclic_graph(graph))
+    # print(networkx.descendants(graph,'HP:0000118'))
 
 
-
-    # filename = 'scoliosis_gVCF_from_zs_updating'
-    # pwd = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis'
-    #
-    # df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    # phenoapt_rank(df,pwd,filename,hpo='hpo_id',refresh=False)
+if __name__ == '__main__':
+    df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', ' organ_system')
+    df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+    readobo(df,'hpo_id',df_organ)
