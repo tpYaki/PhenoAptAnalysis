@@ -325,6 +325,24 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
             part_table.loc[i, 'Exomiser_rank'] = rank
             part_rr_table.loc[i, 'Exomiser_rank'] = rr
 
+        # if 'Exomiser13.1.0' in tools:
+        #     if case_id in case_id_exomiser1310_tsv_file_dict:
+        #         rankdf = pd.read_csv(case_id_exomiser_tsv_file_dict[case_id], sep="\t")
+        #         patho_gene_ID_Exo = list(rankdf['ENTREZ_GENE_ID'])
+        #         if entrezId in patho_gene_ID_Exo:
+        #             rank = patho_gene_ID_Exo.index(entrezId)
+        #             rr = 1 / (1 + rank)
+        #         else:
+        #             rank = 'NA'
+        #             rr = 0
+        #     else:
+        #         rank = 'No_vcf_ranked_by_Exo'
+        #         rr = 0
+        #     part_table.loc[i, 'Exomiser_rank'] = rank
+        #     part_rr_table.loc[i, 'Exomiser_rank'] = rr
+
+        # if 'HANRD' in tools:
+
         if 'LIRICAL' in tools:
             patho_gene_rank_LIR = {}
             if case_id in case_id_LIRICAL_tsv_file_dict:
@@ -624,7 +642,11 @@ def ensemblidfile(genelist, pwd, case_id, filename='scoliosis_gVCF_from_zs_updat
             output_filter.to_csv(f'./{filename}/{profile}/{case_id}.txt', index=False, header=False)
             ##每次都重新储存了filter后的新ensembleid
 
-
+def getvcf_from_zs_gz(pwd,filename):
+    ## 需要固定的.gz文件名称，需要批量提取的队列名单由xlsx整理找zs获得；单人vcf则直接下载
+    os.system(f'{pwd}/{filename}/bash dividevcf.sh')
+    print('vcf unziped from .gz')
+    ## 从gz到单个vcf的脚本
 
 def read_xlsx(path, sheet):
     wb = load_workbook(path)
@@ -644,6 +666,45 @@ def searchensemblid(genesymbol):
     decoded = r.json()
     print(decoded[0]['id'])
     return decoded[0]['id']
+
+import httplib2 as http
+def searchHGNCid(genesymbol):
+    try:
+        from urlparse import urlparse
+    except ImportError:
+        from urllib.parse import urlparse
+
+    headers = {
+        'Accept': 'application/json',
+    }
+
+    uri = 'http://rest.genenames.org'
+    path = f'/search/symbol:{genesymbol}'
+
+    target = urlparse(uri + path)
+    method = 'GET'
+    body = ''
+
+    h = http.Http()
+
+    response, content = h.request(
+        target.geturl(),
+        method,
+        body,
+        headers)
+
+    if response['status'] == '200':
+    # assume that content is a json reply
+    # parse content with the json module
+        data = json.loads(content)
+        #print('Symbol:' + data['response']['docs'][0]['hgnc_id'])
+        HGNCid = data['response']['docs'][0]['hgnc_id']
+        HGNCid = HGNCid.split(':')[1]
+        return HGNCid
+    else:
+        #print('Error detected: ' + response['status'])
+        return 'Error'
+
 
 # 读取诊断表格
 def read_diagnose_xlsx(path):
@@ -879,9 +940,6 @@ def vcf_revel(pwd,inputdir, outputdir, case_id):
     cmd = f'source /Users/liyaqi/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && Vep -i {pwd}/{inputdir}/{case_id}.vcf --fork 4 -o {pwd}/{outputdir}/{case_id}.vcf --assembly GRCh37 --cache --dir /Users/liyaqi/Software/ensembl-vep --offline --fasta /Users/liyaqi/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa --plugin REVEL,/Users/liyaqi/Software/ensembl-vep/revel/new_tabbed_revel.tsv.gz --force_overwrite'
     os.system(cmd)
 
-def zs_diag_zs_gVCF_to_vcf(pwd):  ##gVCF-scolisosis
-    dir_scoliosis_gVCF_from_zs = f"{pwd}/scoliosis_gVCF_from_zs_updating/"
-    os.system(f'{dir_scoliosis_gVCF_from_zs}bash dividevcf.sh')  ##直接在terminal里输入就可以了
 
 
 import yaml
@@ -897,6 +955,22 @@ def getyml_for_certain_ingeritance(case_id_file, hpo_id_input, dir, outputdir, i
         print(config['analysis']['hpoIds'])
         print(config['analysis']['inheritanceModes'])
     with open(f'{dir}/yml/{case_id_file}_{hpo}.yml', "a") as f:  # open the file in append mode
+        f.truncate(0)
+        yaml.dump(config, f)  ##default_flow_style=Faulse
+
+def getyml_for_1310(sequence_id,case_id, hpo_id_input, dir, outputdir, inheridict, hpo, pathogenic = ['REVEL', 'MVP']):
+    with open(f'./yml/1310-test-analysis-exome.yml', 'r') as f:
+        config = yaml.safe_load(f)
+        config['analysis']['vcf'] = f'{dir}/vcf/{sequence_id}.vcf'
+        config['analysis']['hpoIds'] = hpo_id_input  # add the command as a list for the correct yaml
+        config['analysis']['pathogenicitySources'] = pathogenic
+        config['outputOptions']['outputFormats'] = ['TSV_GENE']
+        # config['outputOptions']['outputFormats'] = ['HTML','TSV_GENE','TSV_VARIANT']
+        config['outputOptions']['outputPrefix'] = f'{dir}/{outputdir}/1310-{case_id}'
+        config['inheritanceModes'] = inheridict
+        print(config['analysis']['hpoIds'])
+        print(config['analysis']['inheritanceModes'])
+    with open(f'{dir}/yml/1310-{case_id}_{hpo}.yml', "a") as f:  # open the file in append mode
         f.truncate(0)
         yaml.dump(config, f)  ##default_flow_style=Faulse
 
@@ -960,6 +1034,65 @@ def generateyml_zs_diag_zs_gVCF(df,pwd,filename,hpo,refresh=False):
             print(f'{case_id}, NO.{i}, exomiser done')
             m = m + 1
             print(f'{m} case finish exomiser')
+            print(f'{n} files were not in {filename}')
+
+## pahtogenicity version合并
+def generateyml1310_zs_diag_zs_gVCF(df, pwd, filename, hpo, refresh=False):
+    sequence_ids = df['sequence ID']
+    print(f"{len(df)}")
+    dir_scoliosis_gVCF_from_zs = f"{pwd}/{filename}"
+    if 'vcf' not in os.listdir(dir_scoliosis_gVCF_from_zs):
+        os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/vcf')
+    sequence_id_file_dict = os.listdir(f'{dir_scoliosis_gVCF_from_zs}/vcf/')
+    ##print(sequence_id_file_dict)
+    m = 0
+    n = 0
+    for i in range(len(df)):
+        sequence_id = sequence_ids[i]
+        sequence_id_file = f'{sequence_id}.vcf'
+        case_id = df.loc[i,'Blood ID']
+        #Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
+        if sequence_id_file not in sequence_id_file_dict:
+            print(f"{sequence_id_file} not in {filename}")
+            n = n + 1
+            ##去搞vcf吧
+            continue
+        else:
+            print("vcf ok")
+            if df.loc[i, hpo][0] == '[':
+                hpo_id = df.loc[i, hpo][2:-2]
+                hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+            else:
+                hpo_id = df.loc[i, hpo]
+                hpo_id_input = [k for k in hpo_id.split(";")]
+            inheri = (str(df.loc[i, 'inheritance'])).split(',')  ##存在输入了多种mode的可能
+            inheridict = {}
+            for k in inheri:
+                j = k.split(':')
+                inheridict[f'{j[0]}'] = float(j[1])
+            ##inheridict = [k for k in (df.loc[i, 'inheritance']).split(";")]
+            print(inheridict)
+            if hpo!='hpo_id':
+                outputdir = f'{hpo}_Exomiseroutput'
+                if outputdir not in os.listdir(dir_scoliosis_gVCF_from_zs):
+                    os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/{outputdir}')
+                if (f'1310-{case_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
+                    getyml_for_1310(sequence_id,case_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, outputdir, inheridict, hpo)
+                if (f'1310-{case_id}' not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/{hpo}_Exomiseroutput'))) or refresh:
+                    command = f'cd /Users/liyaqi/Downloads/exomiser-cli-13.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-13.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/1310-{case_id}_{hpo}.yml'
+                    print(command)
+                    os.system(command)
+            else:
+                if (f'1310-{case_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
+                    getyml_for_1310(sequence_id,case_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, 'Exomiseroutput',
+                                                   inheridict, hpo)
+                if (f'1310-{case_id}' not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/Exomiseroutput'))) or refresh:
+                    command = f'cd /Users/liyaqi/Downloads/exomiser-cli-13.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-13.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/1310-{case_id}_{hpo}.yml'
+                    print(command)
+                    os.system(command)
+            print(f'{case_id}, NO.{i}, exomiser 13.1.0 done')
+            m = m + 1
+            print(f'{m} case finish exomiser 13.1.0')
             print(f'{n} files were not in {filename}')
 
 
@@ -1054,6 +1187,91 @@ def generateped():
         cmd = f'mv /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/scoliosis_gVCF_from_zs_updating/ped/{case_id}.tsv /Users/liyaqi/PycharmProjects/PhenoAptAnalysis/scoliosis_gVCF_from_zs_updating/ped/{case_id}.ped'
         os.system(cmd)
         ##做好了ped for phen-gen
+
+def get_HANRD(df,pwd,filename,hpo):
+    #print('start')
+    HANRD_input=pd.DataFrame(columns=['ID','HPO','Orphanet ID (Diagnosed Disorder)','HGNC (Casual Gene)'])
+    for i in range(len(df)):
+        if df.loc[i, hpo][0] == '[':
+            hpo_id = df.loc[i, hpo][2:-2]
+            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+        else:
+            hpo_id = df.loc[i, hpo]
+            hpo_id_input = [k for k in hpo_id.split(";")]
+        #print(hpo_id_input)
+        HPO=''
+        for k in hpo_id_input:
+            HPO = HPO+str(k)+', '
+        print(HPO[:-2])
+        HANRD_input.loc[i,'HPO'] = HPO[:-2]
+        HANRD_input.loc[i,'ID'] = df.loc[i, 'Blood ID']
+        HANRD_input.loc[i,'HGNC (Casual Gene)'] = df.loc[i, 'HGNC']
+        HANRD_input.loc[i,'Orphanet ID (Diagnosed Disorder)'] = '-'
+        # HANRD_input.set_index('ID')
+    if 'HANRDoutput' not in os.listdir(f'{pwd}/{filename}'):
+        os.system('mkdir HANRDoutput')
+    if f'{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv' in os.listdir(f'{pwd}/{filename}/HANRDoutput/'):
+        ##已经有输入file了
+        old_input_file = pd.read_csv(f'{pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv', sep='\t')
+        if old_input_file.equals(HANRD_input):
+            print('using HANRD result in cache')
+        else:
+            os.system(f'cp {pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv {pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD-last-input.tsv')
+            HANRD_input.to_csv(f'{pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv', sep='\t',index=False)
+            print('new HANRD file ready')
+            os.system(f'cd ~/Software/HANRD/gcas && java -Xmx8096M -jar gcas.jar {pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv')
+            print('HANRD done')
+    else:
+        HANRD_input.to_csv(f'{pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv', sep='\t',index=False)
+        print('new HANRD file ready')
+        os.system(f'cd ~/Software/HANRD/gcas && java -Xmx8096M -jar gcas.jar {pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD.tsv && mv ./data/output/gVCF-diagnosed-cohort-2022-HANRD_genes.out {pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD_genes.csv')
+        print('HANRD done')
+
+def pubcasefinder(df,pwd,filename,hpo,refresh=False):
+    ##日本时间晚上11点到凌晨五点之间
+    if 'pubcasefinderoutput' not in os.listdir(f'{pwd}/{filename}'):
+        os.system(f'mkdir {pwd}/{filename}/pubcasefinderoutput')
+    for i in range(len(df)):
+        if df.loc[i, hpo][0] == '[':
+            hpo_id = df.loc[i, hpo][2:-2]
+            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+        else:
+            hpo_id = df.loc[i, hpo]
+            hpo_id_input = [k for k in hpo_id.split(";")]
+        #print(hpo_id_input)
+        HPO=''
+        for k in hpo_id_input:
+            HPO = HPO+str(k)+','
+        url = f'https://pubcasefinder.dbcls.jp/api/get_ranked_list?target=gene&format=json&hpo_id={HPO[:-1]}'
+        print(url)
+        case_id = df.loc[i,'Blood ID']
+        if f'{case_id}_{hpo}.json' not in os.listdir(f'{pwd}/{filename}/pubcasefinderoutput') or refresh:
+            os.system(f'cd {pwd}/{filename}/pubcasefinderoutput && wget -O {case_id}_{hpo}.json {url}')
+            time.sleep(10)
+
+def get_PhenoRank(df,pwd,filename,hpo,refresh=False):
+    for i in range(len(df)):
+        if df.loc[i, hpo][0] == '[':
+            hpo_id = df.loc[i, hpo][2:-2]
+            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+        else:
+            hpo_id = df.loc[i, hpo]
+            hpo_id_input = [k for k in hpo_id.split(";")]
+        #print(hpo_id_input)
+        HPO=''
+        for k in hpo_id_input:
+            HPO = HPO+str(k)+';'
+        case_id = df.loc[i,'Blood ID']
+        if 'PhenoRankoutput' not in os.listdir(f'{pwd}/{filename}'):
+            os.system(f'mkdir {pwd}/{filename}/PhenoRankoutput')
+        if f'{case_id}_{hpo}.tsv' not in os.listdir(f'{pwd}/{filename}/PhenoRankoutput') or refresh:
+            cmd = f"cd ~/Software/PhenoRank && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate phenorank && python run_PhenoRank.py -o {pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv -p '{HPO[:-1]}' && exit"
+            appscript.app('Terminal').do_script(cmd)
+            time.sleep(15)
+            print('new phenorank ok')
+        else:
+            print('phenorank exist')
+
 
 
 def GADO(df,pwd='/Users/liyaqi/PycharmProjects/PhenoAptAnalysis',filename='scoliosis_gVCF_from_zs_updating',hpo='hpo_id',refresh=False):
@@ -1483,7 +1701,8 @@ def readobo(df,hpo,df_organ):
     # print(networkx.is_directed_acyclic_graph(graph))
     # print(networkx.descendants(graph,'HP:0000118'))
 
-    #
+
     # df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', ' organ_system')
-    # df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    # readobo(df,'hpo_id',df_organ)
+    df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+    # for i in df['Symbol']:
+    #     print(searchHGNCid(i))
