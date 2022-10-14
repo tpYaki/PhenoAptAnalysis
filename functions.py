@@ -86,8 +86,7 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
     part_table_for_R = pd.DataFrame(columns=columns_fill)
     part_rr_table_for_R = pd.DataFrame(columns=columns_fill+['Frequency','Variant_class','Inheritance_ADAR',f'{hpo}_organ_system',f'{hpo}_organ_system_number'])
     ##for R是后面去掉NA的。
-    part_r_N_table = pd.DataFrame(columns=columns_fill+['Frequency','Variant_class','Inheritance_ADAR',f'{hpo}_organ_system',f'{hpo}_organ_system_number'])
-    part_r_N_table_for_R = pd.DataFrame(columns=columns_fill+['Frequency','Variant_class','Inheritance_ADAR',f'{hpo}_organ_system',f'{hpo}_organ_system_number'])
+
     for i in tqdm(range(len(df))):
 
         if df.loc[i, hpo][0] == '[':
@@ -130,15 +129,6 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
         part_rr_table.loc[i, f'{hpo}_organ_system'] =df.loc[i,f'{hpo}_organ_system']
         part_rr_table.loc[i, f'{hpo}_organ_system_number'] = df.loc[i, f'{hpo}_organ_system_number']
 
-        part_r_N_table.loc[i, 'CaseID'] = case_id
-        part_r_N_table.loc[i, 'hpo'] = hpo
-        part_r_N_table.loc[i, 'hpo_id_input'] = f'{hpo_id_input}'
-        part_r_N_table.loc[i, 'Symbol'] = symbol
-        part_r_N_table.loc[i, 'Frequency'] = df.loc[i, 'Frequency']
-        part_r_N_table.loc[i, 'Variant_class'] = df.loc[i, 'Variant_class']
-        part_r_N_table.loc[i, 'Inheritance_ADAR'] = df.loc[i, 'Inheritance_ADAR']
-        part_r_N_table.loc[i, f'{hpo}_organ_system'] = df.loc[i, f'{hpo}_organ_system']
-        part_r_N_table.loc[i, f'{hpo}_organ_system_number'] = df.loc[i, f'{hpo}_organ_system_number']
         if 'phrank' in tools:
             phrank_gene_ranking = pd.read_csv(
                 f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_nogenelist_phrank_rank.tsv', sep='\t')
