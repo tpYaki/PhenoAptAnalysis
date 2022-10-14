@@ -27,17 +27,18 @@ import allel
 from functions import *
 
 
-def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,statistic = True,refresh=False,newcase_runtool=False,newvcfgz=False,collect_variants_tofile = False): ##无精炼HPO版本
+def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,statistic = True,refresh=False,newcase_runtool=False,newvcfgz=False,collect_variants_tofile = False,collect_organ = True): ##无精炼HPO版本
 
     filename = 'scoliosis_gVCF_from_zs_updating'
     pwd = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis'
 
     df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx',' organ_system')
-
+    df_sex = read_xlsx('~/Documents/生信/gvcf-scoliosis-2022.xlsx', 'case')
     df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    #df = df[:1].reset_index(drop=True)
+    #df = df[7:8].reset_index(drop=True)
     case_ids = df['Blood ID']
-    df = readobo(df,hpo,df_organ)
+    if collect_organ:
+        df = readobo(df,hpo,df_organ,save=False)
     print(f"{len(df)}")
 
     if newcase_runtool:
@@ -72,7 +73,7 @@ def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,
             print('Exomiser 13.1.0 ready')
             ## 新的hpo，新的case
         if 'HANRD' in tools:
-            get_HANRD(df)
+            get_HANRD(df,pwd,filename,hpo,refresh=refresh,refresh_seperate_file=refresh)
             print('HANRD ready')
         if 'GADO' in tools:
             GADO(df,pwd,filename,hpo,refresh=refresh)
@@ -95,6 +96,13 @@ def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,
             ## phrank检查是否有漏跑CADD
             print('phrank ready')
 
+        if 'PhenoRank' in tools:
+            get_PhenoRank(df, pwd, filename, hpo,refresh=refresh)
+            input('PhenoRank finish with no HPO error? input any character to continue')
+            get_PhenoRank(df, pwd, filename, hpo, refresh=False)##只补做上一波HPO有bug的case，不用refresh
+            print('PhenoRank ready')
+
+
         if 'phenoapt' in tools:
             if hpo != 'Weight':
                 phenoapt_rank(df, pwd, filename, hpo, refresh)
@@ -102,6 +110,14 @@ def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,
                 phenoapt_rank(df, pwd, filename, hpo, refresh=refresh)#只有重点hpo，不加权
                 phenoapt_rank(df,pwd,filename,hpo,refresh=refresh, all_hpo_plus_weight=True)#有所有hpo，加权重点hpo
                 phenoapt_rank(df, pwd, filename, hpo, refresh=refresh, only_weight_hpo_weight=True)#只有重点hpo，加权重点hpo
+
+        if 'phenomizer' in tools:
+            print('manually search on website\nhttps://compbio.charite.de/phenomizer/')
+            os.system(f'cd {pwd}/{filename}/phenomizeroutput && bash delet2df.sh')
+
+        if 'phen-gen' in tools:
+            generateped(df,pwd,filename,refresh,df_sex)
+            print('manually run on PUMCH server and download the rank result')
 
     if statistic:
         statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh,CADD_thresh)
@@ -111,27 +127,6 @@ def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,
 
     Rscript_brief_benchmark(tools, intersect, REVEL_thresh, CADD_thresh)
 
-def pubcasefinder(df,pwd,filename,hpo,refresh=False):
-    ##日本时间晚上11点到凌晨五点之间
-    if 'pubcasefinderoutput' not in os.listdir(f'{pwd}/{filename}'):
-        os.system(f'mkdir {pwd}/{filename}/pubcasefinderoutput')
-    for i in range(len(df)):
-        if df.loc[i, hpo][0] == '[':
-            hpo_id = df.loc[i, hpo][2:-2]
-            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
-        else:
-            hpo_id = df.loc[i, hpo]
-            hpo_id_input = [k for k in hpo_id.split(";")]
-        #print(hpo_id_input)
-        HPO=''
-        for k in hpo_id_input:
-            HPO = HPO+str(k)+','
-        url = f'https://pubcasefinder.dbcls.jp/api/get_ranked_list?target=gene&format=json&hpo_id={HPO[:-1]}'
-        print(url)
-        case_id = df.loc[i,'Blood ID']
-        if f'{case_id}_{hpo}.json' not in os.listdir(f'{pwd}/{filename}/pubcasefinderoutput') or refresh:
-            os.system(f'cd {pwd}/{filename}/pubcasefinderoutput && wget -O {case_id}_{hpo}.json {url}')
-            time.sleep(10)
 
 
 # Press the green button in the gutter to run the script.
@@ -139,14 +134,39 @@ if __name__ == '__main__':
     filename = 'scoliosis_gVCF_from_zs_updating'
     pwd = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis'
     df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    # df = df[:1].reset_index(drop=True)
+    tools = ['phenoapt', 'phenomizer', 'phenolyzer', 'GADO', 'PhenoRank', 'phen2gene', 'phrank', 'HANRD', 'LIRICAL',
+                      'Exomiser','Exomiser13.1.0', 'Phen_gen']
+    #df = df[17:18].reset_index(drop=True)
+    compare_df_for_R(df, tools, pwd, 'wilcoxon', dMRR_heatmap=False)
+
+
+
+    ##给df注释器官信息
+    #df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', ' organ_system')
+    # df=pd.read_csv(f'{pwd}/TF_IDF_weight_organ_2.tsv',sep='\t')
+    # result=readobo(df, 'hpo_id', df_organ)
+
+    #重复器官的展开
+    #TF_IDF_distribution_R()
+
+    ## searchTF_IDF_for_R(df, tools, pwd,filename)
+    # subgroup(df,tools,pwd,filename)
+    #tools = ['phenomizer', 'phenolyzer', 'GADO', 'PhenoRank', 'phen2gene', 'phrank', 'HANRD', 'LIRICAL',
+    #                  'Exomiser','Exomiser13.1.0', 'Phen_gen']
+    # compare_df_for_R(df,tools,pwd,'hpo_id_Weight',dMRR_heatmap=True)
+    # df0_phenoapt_4_strategy_rr(df,tools,pwd)
     # main_2(tools=['phrank','phenolyzer','GADO','phen2gene','phenoapt','LIRICAL','Exomiser','Phen_gen'],CADD_thresh=[10,15,20],REVEL_thresh=[0.25,0.5,0.75],hpo='hpo_id',intersect=True,refresh=False,newcase=True,statistic=True)
     # Rscript_MRR_matrix(df)
     # collect_variants(pwd,df, filename)
     # generateyml1310_zs_diag_zs_gVCF(df, pwd, filename, 'Weight', refresh=True)
-    # get_HANRD(df,pwd,filename,'Weight')
+    # get_HANRD(df,pwd,filename,'hpo_id',False,True)
     # pubcasefinder(df, pwd, filename, 'hpo_id', refresh=True)
-    get_PhenoRank(df, pwd, filename, 'hpo_id')
+    # file_prepare(df, pwd, filename,REVEL_thresh=[0.25,0.5,0.75],CADD_thresh=[10,15,20],refresh=False)
+    # get_PhenoRank(df, pwd, filename, 'hpo_id')
+    # main_2(tools=['phrank','phenolyzer','Exomiser13.1.0','GADO','PhenoRank','phen2gene','phenoapt','LIRICAL','HANRD','Exomiser','Phen_gen','phenomizer'],CADD_thresh=[10,15,20],REVEL_thresh=[0.25,0.5,0.75],hpo='hpo_id',intersect=True,refresh=False,newcase_runtool=False,statistic=True,collect_organ = True)
 
+    ## newcase to run SNV and CNV
+    # main_2(tools=['phrank','phenolyzer','Exomiser13.1.0','GADO','PhenoRank','phen2gene','phenoapt','LIRICAL','HANRD','Exomiser','Phen_gen','phenomizer'], hpo='Weight', intersect=True, refresh=False, newcase_runtool=False, statistic=True, collect_organ=True)
+    # cnv_FA(pwd,filename,df,True)
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 
