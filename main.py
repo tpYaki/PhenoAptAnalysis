@@ -35,6 +35,8 @@ def main_2(tools=[],CADD_thresh=[],REVEL_thresh=[],hpo='hpo_id',intersect=False,
     df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx',' organ_system')
     df_sex = read_xlsx('~/Documents/生信/gvcf-scoliosis-2022.xlsx', 'case')
     df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+
+    ## 可以按需要修改manual vcf tsv的地址，在get_case_id_file()中输入
     #df = df[7:8].reset_index(drop=True)
     case_ids = df['Blood ID']
     if collect_organ:

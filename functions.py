@@ -128,14 +128,12 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
         part_rr_table.loc[i, 'Inheritance_ADAR'] = df.loc[i, 'Inheritance_ADAR']
         part_rr_table.loc[i, f'{hpo}_organ_system'] =df.loc[i,f'{hpo}_organ_system']
         part_rr_table.loc[i, f'{hpo}_organ_system_number'] = df.loc[i, f'{hpo}_organ_system_number']
-
         if 'phrank' in tools:
             phrank_gene_ranking = pd.read_csv(
                 f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_nogenelist_phrank_rank.tsv', sep='\t')
             phrank_gene_ranking = list(phrank_gene_ranking['1'])
             part_table.loc[i, 'phrank_rank'], part_rr_table.loc[i, 'phrank_rank'] = get_rank(ensemblid,
                                                                                              phrank_gene_ranking)
-
             if intersect:
                 phrank_gene_ranking = pd.read_csv(
                     f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_candidategene_ensemblid_phrank_rank.tsv',
@@ -701,6 +699,7 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
     part_rr_table_for_R.to_csv(f'{hpo}_{len(tools)}_rr_with_vcf_len_{len(df)}.tsv', sep='\t')
 
 
+
 def file_prepare(cohort_df, pwd, filename,REVEL_thresh=[],CADD_thresh=[],refresh=False,intersect=False):
     if len(REVEL_thresh) != 0:
         genertatevcf_zs_diag_dropbox_tsv(cohort_df,pwd=pwd, filename=filename, refresh=refresh)
@@ -881,7 +880,7 @@ def ensemblidfile(genelist, pwd, case_id, filename='scoliosis_gVCF_from_zs_updat
             ##每次都重新储存了filter后的新ensembleid
 
 def getvcf_from_zs_gz(pwd,filename):
-    ## 需要固定的.gz文件名称，需要批量提取的队列名单由xlsx整理找zs获得；单人vcf则直接下载
+    ## 需要固定的.gz文件名称，需要批量提取的队列名单由xlsx整理找zs获得,每次刷新list，但是不会refresh已经分离出来的个人vcf；单人vcf则直接下载
     os.system(f'{pwd}/{filename}/bash dividevcf.sh')
     print('vcf unziped from .gz')
     ## 从gz到单个vcf的脚本
@@ -977,22 +976,33 @@ def get_case_id_file_map(case_ids,tsv_dir='/Users/liyaqi/Dropbox/Filtered-SNV-al
     return case_id_tsv_file_map
 
 
-def get_case_id_file(case_id, mode,tsv_dir='/Users/liyaqi/Dropbox/Filtered-SNV-all/Sporadic-WES-All'):
-    if mode == 'sporadic':
+def get_case_id_file(case_id, mode,pwd,filename,old_dir='/Users/liyaqi/Dropbox/Filtered-SNV-all',manual_dir = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/scoliosis_gVCF_from_zs_updating/manually_downloaded_vcf',filetype='tsv'):
+    if mode in ['sporadic','trio']:
+        tsv_dir = os.path.join(old_dir,f'{mode}-WES-All')
         files = os.listdir(tsv_dir)
         for file_name in files:
             if case_id in file_name:
                 case_id_tsv_file = os.path.join(tsv_dir, file_name)
                 return case_id_tsv_file
         return 0
-    else:
-        if mode == 'trio':
-            files = os.listdir(tsv_dir)
-            for file_name in files:
-                if case_id in file_name:
-                    case_id_tsv_file = os.path.join(tsv_dir, file_name)
+    if mode == 'manual':
+        files = os.listdir(manual_dir)
+        for file_name in files:
+            if case_id in file_name:
+                if f'.flt.{filetype}' in file_name:
+                    case_id_tsv_file = os.path.join(manual_dir, file_name)
                     return case_id_tsv_file
-            return 0
+        return 0
+    if mode == 'vcfgz':
+        vcfgz_dir = os.path.join(f'{pwd}/{filename}', f'vcf')
+        files = os.listdir(vcfgz_dir)
+        for file_name in files:
+            if case_id in file_name:
+                case_id_tsv_file = os.path.join(vcfgz_dir, file_name)
+                return case_id_tsv_file
+        return 0
+    ##获取一些原始数据manual的vcf和tsv，vcfgz解压来的vcf,old tsv
+
 
 
 def get_case_id_integ_file_map(pwd, filename, integ, case_ids, hpo):
@@ -1065,7 +1075,7 @@ def tsv_filtered_by_revel(df_input, case_id, pwd, filename, thresh):
     ## df_imput 是读出来的dropbox tsv,根据revel注释的vcf文件，生成{case_id}_revel_filter_{REVEL_Thresh}.tsv，也就是可以读取成df的文件，并且输出df_input中符合revel要求的部分
     dir = f'{pwd}/{filename}/dropbox2vcf_revel'
     if f'{case_id}_revel_filter_{thresh}.tsv' not in os.listdir(dir):
-        cmd = f'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && filter_vep -i {dir}/{case_id}.vcf --filter "REVEL > {thresh} or not REVEL" -o {dir}/{case_id}_revel_filter_{thresh}.tsv --force_overwrite && bash {dir}/delet2df.sh'
+        cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && filter_vep -i {dir}/{case_id}.vcf --filter "REVEL > {thresh} or not REVEL" -o {dir}/{case_id}_revel_filter_{thresh}.tsv --force_overwrite && bash {dir}/delet2df.sh'
         os.system(cmd)
     vcf_revel_tsv = pd.read_csv(f'{dir}/{case_id}_revel_filter_{thresh}.tsv', sep='\t')
     vcf_revel_tsv['variant_list'] = vcf_revel_tsv['Location'].map(str) + vcf_revel_tsv['Allele']
@@ -1085,7 +1095,7 @@ def tsv_filtered_by_revel(df_input, case_id, pwd, filename, thresh):
     return df_result
 
 
-def getvcf_from_dropbox_tsv(pwd,case_id, dir, filename):
+def getvcf_from_dropbox_tsv(pwd,filename,case_id, dir, outputfilename):
     df = pd.read_csv(dir, sep="\t")  ##dropbox的tsv
     dfx = df
     for i in range(len(df)):
@@ -1094,7 +1104,7 @@ def getvcf_from_dropbox_tsv(pwd,case_id, dir, filename):
             ##print(i, 'ALT', df.at[i, 'ALT'])
             pos = int(df.at[i, 'POS'])
             chr = df.at[i, 'CHR']
-            cmd = f'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
+            cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
             result = subprocess.getoutput(cmd)
             dfx.at[i, 'ALT'] = result.split('\n')[1]
             dfx.at[i, 'REF'] = result.split('\n')[1] + df.at[i, 'REF']
@@ -1104,7 +1114,7 @@ def getvcf_from_dropbox_tsv(pwd,case_id, dir, filename):
                 ##print(i, 'REF', df.at[i, 'REF'])
                 pos = int(df.at[i, 'POS'])
                 chr = df.at[i, 'CHR']
-                cmd = f'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
+                cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
                 result = subprocess.getoutput(cmd)
                 dfx.at[i, 'REF'] = result.split('\n')[1]
                 dfx.at[i, 'ALT'] = result.split('\n')[1] + df.at[i, 'ALT']
@@ -1123,32 +1133,83 @@ def getvcf_from_dropbox_tsv(pwd,case_id, dir, filename):
     # df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT']
     df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO], axis=1)
     df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']
-    df2.to_csv(f"./{filename}/{case_id}.txt", sep="\t", index=False)  ##转化成vcf信息txt,存到对应数据版本file下
-    vcfdir = f"{pwd}/{filename}"
-    command = f"source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}/script.awk {vcfdir}/{case_id}.txt | bcftools view -o {vcfdir}/{case_id}.vcf"
+    if f'{outputfilename}' not in os.listdir(f'{pwd}/{filename}'):
+        os.system(f'mkdir {pwd}/{filename}/{outputfilename}')
+    df2.to_csv(f"{pwd}/{filename}/{outputfilename}/{case_id}.txt", sep="\t",
+               index=False)  ##转化成vcf信息txt,存到对应数据版本file下
+    vcfdir = f"{pwd}/{filename}/{outputfilename}"
+    command = f"zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}/script.awk {vcfdir}/{case_id}.txt | bcftools view -o {vcfdir}/{case_id}.vcf"
     ## awk加一些vcf的表头信息，再bcftools转化完成vcf
     print(command)
     os.system(command)
+
+def dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id):
+    ##可以从old_pan来，也可以从manual来
+
+    filedir = 'no Filtered TSV anywhere'
+    source_mode = 'no Filtered TSV anywhere'
+    if get_case_id_file(case_id,'manual')!=0:
+        filedir = get_case_id_file(case_id,'manual')
+        source_mode = 'manual_single_V_1_1'
+    else:
+        print(f'no manual tsv file for {case_id}')
+        if get_case_id_file(case_id, 'sporadic') != 0:
+            filedir = get_case_id_file(case_id, 'sporadic')
+            source_mode = 'sporadic_old'
+        else:
+            if get_case_id_file(case_id, 'trio') != 0:
+                filedir = get_case_id_file(case_id, 'trio')
+                source_mode = 'trio_old'
+            else:
+                print(f'no old tsv file for {case_id}')
+    return filedir,source_mode
+
+def dir_of_Filtered_VCF_MUltiple_source(pwd,filename):
+    ##可以从old_list_vcf.gz来，也可以从manual来
+    if 'vcf.gz' in os.listdir(f'{pwd}/{filename}/manually_downloaded_vcf'):
+        os.system('gzip -d *vcf.gz*')
+
+
+
+def generatevcf_Filtered_TSV_intersect_Filtered_VCF(df,pwd,filename,case_id):
+    transform_log = pd.DataFrame(columns=['case_id','source_mode','tsv_file_address','source_vcf_address','intersect'])
+    for k in range(len(df)):
+        filedir,source_mode = dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id)
+        getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'multi_flt_tsv2vcf_no_info')
+        ##合成好了TSV对应的vcf，存在{pwd}/{}/，multi就是tsv来源包括manual，并且manual优先
+        transform_log.loc[k,'case_id'] = case_id
+        transform_log.loc[k, 'source_mode'] = source_mode
+        transform_log.loc[k, 'file_address'] = filedir
+        ##存在log表格文件中
+        ##Filtered VCF 地址 获取
+
+
+
+        ##取与Filtered VCF产生的交集
+        if 'multi_flt_tsv2vcf' not in os.listdir(f'{pwd}/{filename}'):
+            os.system('mkdir multi_flt_tsv2vcf')
+        manual_vcf_file = get_case_id_file(case_id=case_id, mode ='manual', filetype='vcf')
+        cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && bcftools isec -c none -p dir -n=2 -w1 {pwd}/{filename}/multi_flt_tsv2vcf_no_info/{case_id}.vcf {manual_vcf_file} > {pwd}/{filename}/multi_flt_tsv2vcf/{case_id}.vcf'
+        try:
+            os.system(cmd)
+        except Exception as e:
+            print(e)
+        ## 对于没有手动下载VCF的患者，还没有解决。
 
 def genertatevcf_zs_diag_dropbox_tsv(df,pwd, filename, refresh=False):
     ##df = df[2:].reset_index(drop=True)
     print(f"{len(df)}")
     for i in tqdm(range(len(df))):
         case_id = df.loc[i, 'Blood ID']
-        if get_case_id_file(case_id, 'sporadic') != 0:
-            filedir = get_case_id_file(case_id, 'sporadic')
-        else:
-            if get_case_id_file(case_id, 'trio') != 0:
-                filedir = get_case_id_file(case_id, 'trio')
-            else:
-                print(f'no dropbox tsv file for {case_id}')
-                continue
+        filedir = dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id)
+        if filedir == 'no Filtered TSV anywhere':
+            continue
         if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf'):
-            getvcf_from_dropbox_tsv(pwd,case_id, filedir, f'{filename}/dropbox2vcf')
+            getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'dropbox2vcf')
             ##pwd,case_id, dir, filename
         else:
             if refresh:
-                getvcf_from_dropbox_tsv(pwd,case_id, filedir, f'{filename}/dropbox2vcf')
+                getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'dropbox2vcf')
         print('vcf done')
         if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf_revel'):
             vcf_revel(pwd,f'{filename}/dropbox2vcf',
@@ -1165,7 +1226,7 @@ def vcf_revel(pwd,inputdir, outputdir, case_id):
     cmd_pre = f'chmod a+rwx {pwd}/{inputdir}/* && chmod a+rwx {pwd}/{outputdir}/*'
     os.system(cmd_pre)
     print("right done")
-    cmd = f'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && Vep -i {pwd}/{inputdir}/{case_id}.vcf --fork 4 -o {pwd}/{outputdir}/{case_id}.vcf --assembly GRCh37 --cache --dir ~/Software/ensembl-vep --offline --fasta ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa --plugin REVEL,~/Software/ensembl-vep/revel/new_tabbed_revel.tsv.gz --force_overwrite'
+    cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && Vep -i {pwd}/{inputdir}/{case_id}.vcf --fork 4 -o {pwd}/{outputdir}/{case_id}.vcf --assembly GRCh37 --cache --dir ~/Software/ensembl-vep --offline --fasta ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa --plugin REVEL,~/Software/ensembl-vep/revel/new_tabbed_revel.tsv.gz --force_overwrite'
     os.system(cmd)
 
 
@@ -1518,7 +1579,7 @@ def get_PhenoRank(df,pwd,filename,hpo,refresh=False):
         if 'PhenoRankoutput' not in os.listdir(f'{pwd}/{filename}'):
             os.system(f'mkdir {pwd}/{filename}/PhenoRankoutput')
         if f'{case_id}_{hpo}.tsv' not in os.listdir(f'{pwd}/{filename}/PhenoRankoutput') or refresh:
-            cmd = f"cd ~/Software/PhenoRank && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate phenorank && python run_PhenoRank.py -o {pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv -p '{HPO[:-1]}' && exit"
+            cmd = f"cd ~/Software/PhenoRank && zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate phenorank && python run_PhenoRank.py -o {pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv -p '{HPO[:-1]}' && exit"
             appscript.app('Terminal').do_script(cmd)
             time.sleep(15)
             print('new phenorank ok')
@@ -1978,7 +2039,7 @@ def cnv_FA(pwd,filename,df,refresh):
                 cnv.to_csv(f'{pwd}/{filename}/cnv_function_annotation/{sequence_id}.cnv',sep='\t',index=False)
             if f'{sequence_id}.cnv.reg_disruption' not in os.listdir(f'{pwd}/{filename}/cnv_function_annotation/') or refresh:
                 ##使用{case_id}.cnv.reg_disruption检查FA是否做了
-                cmd = f'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate CNV_FA && cd ~/Software/CNV_FunctionalAnnotation && sh bin/annotate-cnv.sh ~/Software {pwd}/{filename}/cnv_function_annotation/{sequence_id}.cnv'
+                cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate CNV_FA && cd ~/Software/CNV_FunctionalAnnotation && sh bin/annotate-cnv.sh ~/Software {pwd}/{filename}/cnv_function_annotation/{sequence_id}.cnv'
                 print(cmd)
                 os.system(cmd)
             if f'{sequence_id}_standard.bed' not in os.listdir(f'{pwd}/{filename}/cnv_function_annotation/') or refresh:
