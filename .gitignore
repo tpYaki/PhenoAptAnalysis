@@ -22,3 +22,10 @@ head.tsv
 mutation_id.tsv
 script.awk
 yml
+R-figure
+*.tsv
+*.numbers
+*.csv
+*.rtf
+*.vcf
+*.xlsx

@@ -1,15 +1,14 @@
-import os
-
 import appscript as appscript
 import pandas as pd
 import xlrd
+import yaml
 from phenoapt import PhenoApt
 import numpy as np
 import subprocess
 import re
 import json
 from suds import client
-from phrank import Phrank
+
 import urllib.request as urlre
 from functools import reduce
 import requests, sys
@@ -22,45 +21,49 @@ from pandas.testing import assert_frame_equal
 import networkx
 import obonet
 
-def output_columns(hpo,tools,intersect,REVEL_thresh,CADD_thresh):
+from script.file_prepare_script import dir_of_Filtered_TSV_MUltiple_source
+from script.process_file_script import get_case_id_file
+
+import sys,os
+custom_module_path = os.path.dirname(os.path.dirname (os.path.abspath ('__file__')))
+print(f'Adding extra dir to sys.path: {custom_module_path}')
+sys.path.append(custom_module_path)
+print(sys.path)
+
+from phrank.phrank import Phrank
+# import phrank
+
+def output_columns(hpo,tools,intersect,REVEL_thresh,CADD_thresh,collect_variants_tofile,collect_organ):
     columns_fill = ['CaseID', 'hpo', 'hpo_id_input', 'Symbol']
     for tool in tools:
-        if tool in ['phrank', 'phenolyzer', 'GADO', 'phen2gene','PhenoRank','HANRD','phenomizer']:
-            columns_fill = columns_fill + [f'{tool}_rank']
-            if intersect: columns_fill = columns_fill + [f'{tool}_intersect_rank']
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    columns_fill = columns_fill + [f'{tool}_rank_REVEL_{thresh}']
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    columns_fill = columns_fill + [f'{tool}_rank_CADD_{thresh}']
-        else:
-            if tool == 'phenoapt':
-                if hpo == 'Weight':
-                    for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']:
-                        columns_fill = columns_fill + [f'{k}_phenoapt_rank']
-                        if intersect: columns_fill = columns_fill + [f'{k}_phenoapt_intersect_rank']
-                        if len(REVEL_thresh) != 0:
-                            for thresh in REVEL_thresh:
-                                columns_fill = columns_fill + [f'{k}_phenoapt_rank_REVEL_{thresh}']
-                        if len(CADD_thresh) != 0:
-                            for thresh in CADD_thresh:
-                                columns_fill = columns_fill + [f'{k}_phenoapt_rank_CADD_{thresh}']
-                else:
-                    columns_fill = columns_fill + [f'{tool}_rank']
-                    if intersect: columns_fill = columns_fill + [f'{tool}_intersect_rank']
-                    if len(REVEL_thresh) != 0:
-                        for thresh in REVEL_thresh:
-                            columns_fill = columns_fill + [f'{tool}_rank_REVEL_{thresh}']
-                    if len(CADD_thresh) != 0:
-                        for thresh in CADD_thresh:
-                            columns_fill = columns_fill + [f'{tool}_rank_CADD_{thresh}']
-            else:
-                columns_fill = columns_fill + [f'{tool}_rank']
+        columns_fill = columns_fill + [f'{tool}_rank']
+        if intersect:
+            columns_fill = columns_fill + [f'{tool}_rank_intersect']
+        if len(REVEL_thresh) != 0:
+            for thresh in REVEL_thresh:
+                columns_fill = columns_fill + [f'{tool}_rank_revel_{thresh}']
+        if len(CADD_thresh) != 0:
+            for thresh in CADD_thresh:
+                columns_fill = columns_fill + [f'{tool}_rank_cadd_{thresh}']
+        if tool == 'phenoapt' and hpo == 'Weight':
+            for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']:
+                columns_fill = columns_fill + [f'{k}_phenoapt_rank']
+                if intersect: columns_fill = columns_fill + [f'{k}_phenoapt_rank_intersect']
+                if len(REVEL_thresh) != 0:
+                    for thresh in REVEL_thresh:
+                        columns_fill = columns_fill + [f'{k}_phenoapt_rank_revel_{thresh}']
+                if len(CADD_thresh) != 0:
+                    for thresh in CADD_thresh:
+                        columns_fill = columns_fill + [f'{k}_phenoapt_rank_cadd_{thresh}']
+
+    if collect_variants_tofile:
+        columns_fill = columns_fill + ['Frequency','Variant_class','Inheritance_ADAR']
+    if collect_organ:
+        columns_fill = columns_fill+[f'{hpo}_organ_system',f'{hpo}_organ_system_number']
     return columns_fill
 
 
-def get_phenomizer_rank(case_id, correct_gene, searchlist):
+def get_phenomizer_rank(correct_gene, searchlist):
     correct_rank = {}
     time = 0
     for k in range(len(searchlist)):
@@ -70,497 +73,274 @@ def get_phenomizer_rank(case_id, correct_gene, searchlist):
     if time == 0:
         rank = 'NA'
         rr = 0
-        print(f'{case_id} correct gene not in phenomizer result')
+        rp = 'NA'
     else:
-        print(f'{case_id} correct gene in phenomizer result:{correct_rank}')
         rank = correct_rank[0]
         rr = 1 / (rank + 1)
-    return rank, rr
+        rp = (rank+1)/len(searchlist)
+    return rank, rr , rp
 
-def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh,CADD_thresh):
-    columns_fill = output_columns(hpo,tools,intersect,REVEL_thresh,CADD_thresh)
+def load_txt_list(filedir):
+    with open(filedir) as f:
+        list = (f.read().replace('\n','')).split(',')
+    return list
+
+def process_rank_result_table(tool,result_mode,result_list,case_id,i,pathogenic_gene_dict,pwd,filename,intersect,REVEL_thresh,CADD_thresh,part_table,part_rr_table,part_rp_table):
+    txt_dir_dict = {'Symbol':'candidategene','Ensembl Gene ID':'candidategene_ensemblid','HGNC':'candidategene_hgncid'}
+    tsv_candidate_gene_list = load_txt_list(f'{pwd}/{filename}/{txt_dir_dict[result_mode]}/{case_id}.txt')
+    Filter_txt_dir_dict = {'Symbol': '', 'Ensembl Gene ID': '_ensemblid','HGNC': '_hgncid'}
+    if len(REVEL_thresh) != 0:
+        tsv_candidate_gene_revel_dict = {}
+        for thresh in REVEL_thresh:
+            tsv_candidate_gene_revel_dict[thresh] = load_txt_list(f'{pwd}/{filename}/revel_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
+
+    if len(CADD_thresh) != 0:
+        tsv_candidate_gene_cadd_dict = {}
+        for thresh in CADD_thresh:
+            tsv_candidate_gene_cadd_dict[thresh] = load_txt_list(f'{pwd}/{filename}/cadd_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
+
+    if tool == 'phenomizer':
+        part_table.loc[i, f'{tool}_rank'], part_rr_table.loc[i, f'{tool}_rank'], part_rp_table.loc[
+            i, f'{tool}_rank'] = get_phenomizer_rank(pathogenic_gene_dict[result_mode], result_list)
+    else:
+        part_table.loc[i, f'{tool}_rank'], part_rr_table.loc[i, f'{tool}_rank'], part_rp_table.loc[
+            i, f'{tool}_rank'] = get_rank(pathogenic_gene_dict[result_mode], result_list)
+    if intersect:
+        if tool =='phenomizer':
+            tool_gene_intersect_list =[]
+            for y in result_list:
+                for x in tsv_candidate_gene_list:
+                    if f'{x} (' in str(y):
+                        tool_gene_intersect_list = tool_gene_intersect_list+[str(y)]
+                        break
+            part_table.loc[i, f'{tool}_rank_intersect'], part_rr_table.loc[i, f'{tool}_rank_intersect'], \
+            part_rp_table.loc[i, f'{tool}_rank_intersect'] = get_phenomizer_rank(pathogenic_gene_dict[result_mode],
+                                                                      tool_gene_intersect_list)
+        else:
+            tool_gene_intersect_list = [x for x in result_list if
+                                        x in tsv_candidate_gene_list]
+            part_table.loc[i, f'{tool}_rank_intersect'], part_rr_table.loc[i, f'{tool}_rank_intersect'], \
+            part_rp_table.loc[i, f'{tool}_rank_intersect'] = get_rank(pathogenic_gene_dict[result_mode], tool_gene_intersect_list)
+    if len(REVEL_thresh) != 0:
+        for thresh in REVEL_thresh:
+            if tool =='phenomizer':
+                tool_gene_revel_list = []
+                for y in result_list:
+                    for x in tsv_candidate_gene_revel_dict[thresh]:
+                        if f'{x} (' in str(y):
+                            tool_gene_revel_list = tool_gene_revel_list + [str(y)]
+                            break
+                part_table.loc[i, f'{tool}_rank_revel_{thresh}'], part_rr_table.loc[
+                    i, f'{tool}_rank_revel_{thresh}'], part_rp_table.loc[
+                    i, f'{tool}_rank_revel_{thresh}'] = get_phenomizer_rank(pathogenic_gene_dict[result_mode], tool_gene_revel_list)
+            else:
+                tool_gene_revel_list = [x for x in result_list if
+                                        x in tsv_candidate_gene_revel_dict[thresh]]
+                part_table.loc[i, f'{tool}_rank_revel_{thresh}'], part_rr_table.loc[
+                    i, f'{tool}_rank_revel_{thresh}'], part_rp_table.loc[
+                    i, f'{tool}_rank_revel_{thresh}'] = get_rank(pathogenic_gene_dict[result_mode], tool_gene_revel_list)
+    if len(CADD_thresh) != 0:
+        for thresh in CADD_thresh:
+            if tool == 'phenomizer':
+                tool_gene_cadd_list = []
+                for y in result_list:
+                    for x in tsv_candidate_gene_cadd_dict[thresh]:
+                        if f'{x} (' in str(y):
+                            tool_gene_cadd_list = tool_gene_cadd_list + [str(y)]
+                            break
+                part_table.loc[i, f'{tool}_rank_cadd_{thresh}'], part_rr_table.loc[
+                    i, f'{tool}_rank_cadd_{thresh}'], part_rp_table.loc[
+                    i, f'{tool}_rank_cadd_{thresh}'] = get_phenomizer_rank(pathogenic_gene_dict[result_mode],tool_gene_cadd_list)
+            else:
+                tool_gene_cadd_list = [x for x in result_list if
+                                       x in tsv_candidate_gene_cadd_dict[thresh]]
+                part_table.loc[i, f'{tool}_rank_cadd_{thresh}'], part_rr_table.loc[
+                    i, f'{tool}_rank_cadd_{thresh}'], part_rp_table.loc[
+                    i, f'{tool}_rank_cadd_{thresh}'] = get_rank(pathogenic_gene_dict[result_mode],
+                                                                     tool_gene_cadd_list)
+    return part_table, part_rr_table, part_rp_table
+
+def processdict(file_dir_dict, mode,hpo,case_id,inheritance):
+    file_dir_dict['Exomiser'][
+        mode] = f'{hpo}_Exomiseroutput{mode}/{case_id}_{inheritance}.genes.tsv'
+    file_dir_dict['Exomiser13.1.0'][
+        mode] = f'{hpo}_Exomiser1310output{mode}/{case_id}.genes.tsv'
+    file_dir_dict['LIRICAL'][
+        mode] = f'{hpo}_LIRICALoutput{mode}/{case_id}.tsv'
+
+
+def statistic_to_table(df,pwd,filename,hpo,tools,intersect,REVEL_thresh,CADD_thresh,collect_variants_tofile,collect_organ):
+    columns_fill =output_columns(hpo,tools,intersect,REVEL_thresh,CADD_thresh,collect_variants_tofile,collect_organ)
     part_table = pd.DataFrame(columns=columns_fill)
-    part_rr_table = pd.DataFrame(columns=columns_fill+['Frequency','Variant_class','Inheritance_ADAR',f'{hpo}_organ_system',f'{hpo}_organ_system_number'])
-    case_id_exomiser_tsv_file_dict = get_case_id_integ_file_map(pwd, filename, 'Exomiser', case_ids, hpo)
-    case_id_LIRICAL_tsv_file_dict = get_case_id_integ_file_map(pwd, filename, 'LIRICAL', case_ids, hpo)
+    part_rr_table = pd.DataFrame(columns=columns_fill)
+    part_rp_table = pd.DataFrame(columns=columns_fill)
     part_table_for_R = pd.DataFrame(columns=columns_fill)
-    part_rr_table_for_R = pd.DataFrame(columns=columns_fill+['Frequency','Variant_class','Inheritance_ADAR',f'{hpo}_organ_system',f'{hpo}_organ_system_number'])
+    part_rr_table_for_R = pd.DataFrame(columns=columns_fill)
+    part_rp_table_for_R = pd.DataFrame(columns=columns_fill)
     ##for R是后面去掉NA的。
+    log = pd.DataFrame(columns=['case_id','hpo_id_input','Symbol']+tools)
+    svcf_vcf_adress_df = pd.read_csv(f'{pwd}/{filename}/log/standard_vcf_log_file.csv').set_index('case_id')
 
     for i in tqdm(range(len(df))):
-
-        if df.loc[i, hpo][0] == '[':
-            hpo_id = df.loc[i, hpo][2:-2]
-            hpo_id_input = [k for k in hpo_id.split("', '")]
-        else:
-            hpo_id = df.loc[i, hpo]
-            hpo_id_input = [k for k in hpo_id.split(";")]
-        symbol = df.loc[i, "Symbol"]
-        entrezGeneId = df.loc[i, 'entrezGeneId']
-        ## NCBIGene:6911 entrezGeneId的格式
-        entrezId = df.loc[i, 'entrezId']
-        ensemblid = df.loc[i, 'Ensembl Gene ID']
-        print(ensemblid)
         case_id = df.loc[i, 'Blood ID']
-        inheritance = df.loc[i,'Inheritance_ADAR']
-        HGNCid=str(int(df.loc[i,'HGNC']))
-        if get_case_id_file(case_id, 'sporadic') != 0:
-            filedir = get_case_id_file(case_id, 'sporadic')
-        else:
-            if get_case_id_file(case_id, 'trio') != 0:
-                filedir = get_case_id_file(case_id, 'trio')
+        log.loc[i,'case_id'] = case_id
+        try:
+            if df.loc[i, hpo][0] == '[':
+                hpo_id = df.loc[i, hpo][2:-2]
+                hpo_id_input = [k for k in hpo_id.split("', '")]
             else:
-                print('no tsv file')
-                continue
-        variation = pd.read_csv(filedir, sep="\t")
-        variation_gene_name = variation['Gene_name']
-
-        part_table.loc[i, 'CaseID'] = case_id
-        part_table.loc[i, 'hpo'] = hpo
-        part_table.loc[i, 'hpo_id_input'] = f'{hpo_id_input}'
-        part_table.loc[i, 'Symbol'] = symbol
-        part_rr_table.loc[i, 'CaseID'] = case_id
-        part_rr_table.loc[i, 'hpo'] = hpo
-        part_rr_table.loc[i, 'hpo_id_input'] = f'{hpo_id_input}'
-        part_rr_table.loc[i, 'Symbol'] = symbol
-        part_rr_table.loc[i, 'Frequency'] = df.loc[i,'Frequency']
-        part_rr_table.loc[i, 'Variant_class'] = df.loc[i, 'Variant_class']
-        part_rr_table.loc[i, 'Inheritance_ADAR'] = df.loc[i, 'Inheritance_ADAR']
-        part_rr_table.loc[i, f'{hpo}_organ_system'] =df.loc[i,f'{hpo}_organ_system']
-        part_rr_table.loc[i, f'{hpo}_organ_system_number'] = df.loc[i, f'{hpo}_organ_system_number']
-        if 'phrank' in tools:
-            phrank_gene_ranking = pd.read_csv(
-                f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_nogenelist_phrank_rank.tsv', sep='\t')
-            phrank_gene_ranking = list(phrank_gene_ranking['1'])
-            part_table.loc[i, 'phrank_rank'], part_rr_table.loc[i, 'phrank_rank'] = get_rank(ensemblid,
-                                                                                             phrank_gene_ranking)
-            if intersect:
-                phrank_gene_ranking = pd.read_csv(
-                    f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_candidategene_ensemblid_phrank_rank.tsv',
-                    sep='\t')
-                phrank_gene_ranking = list(phrank_gene_ranking['1'])
-                part_table.loc[i, 'phrank_intersect_rank'], part_rr_table.loc[
-                    i, 'phrank_intersect_rank'] = get_rank(
-                    ensemblid, phrank_gene_ranking)
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    phrank_gene_ranking = pd.read_csv(
-                        f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_revel_{thresh}_ensemblid_phrank_rank.tsv',
-                        sep='\t')
-                    phrank_gene_ranking = list(phrank_gene_ranking['1'])
-                    part_table.loc[i, f'phrank_rank_REVEL_{thresh}'], part_rr_table.loc[
-                        i, f'phrank_rank_REVEL_{thresh}'] = get_rank(ensemblid, phrank_gene_ranking)
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    phrank_gene_ranking = pd.read_csv(
-                        f'{pwd}/{filename}/phrankoutput/{case_id}_{hpo}_cadd_{thresh}_ensemblid_phrank_rank.tsv',
-                        sep='\t')
-                    phrank_gene_ranking = list(phrank_gene_ranking['1'])
-                    part_table.loc[i, f'phrank_rank_CADD_{thresh}'], part_rr_table.loc[
-                        i, f'phrank_rank_CADD_{thresh}'] = get_rank(ensemblid, phrank_gene_ranking)
-
-        if 'phenolyzer' in tools:
-            if hpo == 'hpo_id':
-                phenolyzer_df = pd.read_csv(
-                    f'{pwd}/{filename}/phenolyzeroutput/{case_id}.final_gene_list',
-                    sep='\t')
-                phenolyzer_result = list(phenolyzer_df['ID'])
-            else:
-                phenolyzer_df = pd.read_csv(
-                    f'{pwd}/{filename}/phenolyzeroutput/{case_id}_{hpo}.final_gene_list',
-                    sep='\t')
-                phenolyzer_result = list(phenolyzer_df['ID'])
-            part_table.loc[i, 'phenolyzer_rank'], part_rr_table.loc[i, 'phenolyzer_rank'] = get_rank(entrezId,
-                                                                                                     phenolyzer_result)
-            if intersect:
-                phenolyzer_intersect_gene_name = (
-                    phenolyzer_df[phenolyzer_df.Gene.isin(variation_gene_name)]).reset_index()
-                phenolyzer_intersect_gene_name = list(phenolyzer_intersect_gene_name['Gene'])
-                part_table.loc[i, 'phenolyzer_intersect_rank'], part_rr_table.loc[
-                    i, 'phenolyzer_intersect_rank'] = get_rank(symbol, phenolyzer_intersect_gene_name)
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    tsv_revel_filter_dir = f'./{filename}/revel_{thresh}/{case_id}.txt'
-                    tsv_revel_filter = pd.read_csv(tsv_revel_filter_dir, sep='\t', header=None)
-                    phenolyzer_intersect_gene_name = (
-                        phenolyzer_df[phenolyzer_df.Gene.isin(tsv_revel_filter[0])]).reset_index()
-                    phenolyzer_intersect_gene_name = list(phenolyzer_intersect_gene_name['Gene'])
-                    part_table.loc[i, f'phenolyzer_rank_REVEL_{thresh}'], part_rr_table.loc[
-                        i, f'phenolyzer_rank_REVEL_{thresh}'] = get_rank(symbol, phenolyzer_intersect_gene_name)
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    tsv_cadd_filter_dir = f'./{filename}/cadd_{thresh}/{case_id}.txt'
-                    tsv_cadd_filter = pd.read_csv(tsv_cadd_filter_dir, sep='\t', header=None)
-                    phenolyzer_intersect_gene_name = (
-                        phenolyzer_df[phenolyzer_df.Gene.isin(tsv_cadd_filter[0])]).reset_index()
-                    phenolyzer_intersect_gene_name = list(phenolyzer_intersect_gene_name['Gene'])
-                    part_table.loc[i, f'phenolyzer_rank_CADD_{thresh}'], part_rr_table.loc[
-                        i, f'phenolyzer_rank_CADD_{thresh}'] = get_rank(symbol, phenolyzer_intersect_gene_name)
-
-        if 'GADO' in tools:
-            GADO_result = pd.read_csv(f'{pwd}/{filename}/GADOoutput/{case_id}.txt', sep='\t')
-            result_ensemblid = list(GADO_result['Ensg'])
-            part_table.loc[i, 'GADO_rank'], part_rr_table.loc[i, 'GADO_rank'] = get_rank(ensemblid,
-                                                                                         result_ensemblid)
-            if intersect:
-                ensemblid_candidate_gene = pd.read_csv(f'./{filename}/candidategene_ensemblid/{case_id}.txt',
-                                                       sep='\t', header=None)
-                GADO_intersect_gene = (
-                    GADO_result[GADO_result.Ensg.isin(ensemblid_candidate_gene[0])]).reset_index()
-                GADO_intersect_gene = list(GADO_intersect_gene['Ensg'])
-                part_table.loc[i, 'GADO_intersect_rank'], part_rr_table.loc[
-                    i, 'GADO_intersect_rank'] = get_rank(ensemblid, GADO_intersect_gene)
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    tsv_revel_filer_ensemblid_dir = f'./{filename}/revel_{thresh}_ensemblid/{case_id}.txt'
-                    tsv_revel_filer_ensemblid = pd.read_csv(tsv_revel_filer_ensemblid_dir, sep='\t', header=None)
-                    GADO_intersect_gene = (
-                        GADO_result[GADO_result.Ensg.isin(tsv_revel_filer_ensemblid[0])]).reset_index()
-                    GADO_intersect_gene = list(GADO_intersect_gene['Ensg'])
-                    part_table.loc[i, f'GADO_rank_REVEL_{thresh}'], part_rr_table.loc[
-                        i, f'GADO_rank_REVEL_{thresh}'] = get_rank(ensemblid, GADO_intersect_gene)
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    tsv_CADD_filer_ensemblid_dir = f'./{filename}/cadd_{thresh}_ensemblid/{case_id}.txt'
-                    tsv_CADD_filer_ensemblid = pd.read_csv(tsv_CADD_filer_ensemblid_dir, sep='\t', header=None)
-                    GADO_intersect_gene = (
-                        GADO_result[GADO_result.Ensg.isin(tsv_CADD_filer_ensemblid[0])]).reset_index()
-                    GADO_intersect_gene = list(GADO_intersect_gene['Ensg'])
-                    part_table.loc[i, f'GADO_rank_CADD_{thresh}'], part_rr_table.loc[
-                        i, f'GADO_rank_CADD_{thresh}'] = get_rank(ensemblid, GADO_intersect_gene)
-
-        if 'phen2gene' in tools:
-            phen2gene_result = pd.read_csv(
-                f'{pwd}/{filename}/phen2geneoutput_nolist/{case_id}-phen2gene-nolist-output.txt', sep="\t")
-            phen2gene_rank = list(phen2gene_result["ID"])
-            part_table.loc[i, 'phen2gene_rank'], part_rr_table.loc[i, 'phen2gene_rank'] = get_rank(entrezId,
-                                                                                                   phen2gene_rank)
-            if intersect:
-                phen2gene_intersect_result = pd.read_csv(
-                    f'{pwd}/{filename}/phen2geneoutput/{case_id}-phen2gene-candidategene-output.txt', sep="\t")
-                phen2gene_intersect_result = list(phen2gene_intersect_result['Gene'])
-                part_table.loc[i, 'phen2gene_intersect_rank'], part_rr_table.loc[
-                    i, 'phen2gene_intersect_rank'] = get_rank(symbol, phen2gene_intersect_result)
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    phen2gene_intersect_result = pd.read_csv(
-                        f'{pwd}/{filename}/phen2geneoutput/{case_id}-phen2gene-revel_{thresh}-output.txt', sep="\t")
-                    phen2gene_intersect_result = list(phen2gene_intersect_result['Gene'])
-                    part_table.loc[i, f'phen2gene_rank_REVEL_{thresh}'], part_rr_table.loc[
-                        i, f'phen2gene_rank_REVEL_{thresh}'] = get_rank(symbol, phen2gene_intersect_result)
-                    ##输入列表就是基因名称，所以可能不存在排出来的基因名称、数目和Tsv全体candidate gene不一致的情况。中间有做symbol转换吗可以看看文章
-
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    phen2gene_intersect_result = pd.read_csv(
-                        f'{pwd}/{filename}/phen2geneoutput/{case_id}-phen2gene-cadd_{thresh}-output.txt', sep="\t")
-                    phen2gene_intersect_result = list(phen2gene_intersect_result['Gene'])
-                    part_table.loc[i, f'phen2gene_rank_CADD_{thresh}'], part_rr_table.loc[
-                        i, f'phen2gene_rank_CADD_{thresh}'] = get_rank(symbol, phen2gene_intersect_result)
-
-        if 'phenoapt' in tools:
-            if hpo != 'Weight':
-                pheno_result = pd.read_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',
-                                           sep='\t')
-                pheno_rank = list(pheno_result['gene_symbol'])
-                part_table.loc[i, 'phenoapt_rank'], part_rr_table.loc[i, 'phenoapt_rank'] = get_rank(symbol,
-                                                                                                     pheno_rank)
-                if intersect:
-                    intersect_gene = (
-                        pheno_result[pheno_result.gene_symbol.isin(variation_gene_name)]).reset_index()
-                    intersect_gene = list(intersect_gene['gene_symbol'])
-                    part_table.loc[i, 'phenoapt_intersect_rank'], part_rr_table.loc[
-                        i, 'phenoapt_intersect_rank'] = get_rank(symbol, intersect_gene)
-                if len(REVEL_thresh) != 0:
-                    for thresh in REVEL_thresh:
-                        tsv_revel_filter_dir = f'./{filename}/revel_{thresh}/{case_id}.txt'
-                        tsv_revel_filter = pd.read_csv(tsv_revel_filter_dir, sep='\t', header=None)
-                        intersect_gene = (
-                            pheno_result[pheno_result.gene_symbol.isin(tsv_revel_filter[0])]).reset_index()
-                        intersect_gene = list(intersect_gene['gene_symbol'])
-                        part_table.loc[i, f'phenoapt_rank_REVEL_{thresh}'], part_rr_table.loc[
-                            i, f'phenoapt_rank_REVEL_{thresh}'] = get_rank(symbol, intersect_gene)
-                if len(CADD_thresh) != 0:
-                    for thresh in CADD_thresh:
-                        tsv_cadd_filter_dir = f'./{filename}/cadd_{thresh}/{case_id}.txt'
-                        tsv_cadd_filter = pd.read_csv(tsv_cadd_filter_dir, sep='\t', header=None)
-                        intersect_gene = (
-                            pheno_result[pheno_result.gene_symbol.isin(tsv_cadd_filter[0])]).reset_index()
-                        intersect_gene = list(intersect_gene['gene_symbol'])
-                        part_table.loc[i, f'phenoapt_rank_CADD_{thresh}'], part_rr_table.loc[
-                            i, f'phenoapt_rank_CADD_{thresh}'] = get_rank(symbol, intersect_gene)
-            else:
-                for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']:
-                    def get_phenoapt_result_dir(k):
-                        if k == 'all_hpo_plus_weight':
-                            pheno_result_dir = f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv'
-                            return pheno_result_dir
-                        if k == 'only_weight_hpo_no_weight':
-                            pheno_result_dir = f'{pwd}/{filename}/phenoaptoutput/{case_id}_only_{hpo}_hpo_no_weight_phenoapt_rank.tsv'
-                            return pheno_result_dir
-                        if k == 'only_weight_hpo_weight':
-                            pheno_result_dir = f'{pwd}/{filename}/phenoaptoutput/{case_id}_only_{hpo}_hpo_weight_phenoapt_rank.tsv'
-                            return pheno_result_dir
-
-                    pheno_result = pd.read_csv(get_phenoapt_result_dir(k), sep='\t')
-                    pheno_rank = list(pheno_result['gene_symbol'])
-                    part_table.loc[i, f'{k}_phenoapt_rank'], part_rr_table.loc[i, f'{k}_phenoapt_rank'] = get_rank(
-                        symbol, pheno_rank)
-                    if intersect:
-                        intersect_gene = (
-                            pheno_result[pheno_result.gene_symbol.isin(variation_gene_name)]).reset_index()
-                        intersect_gene = list(intersect_gene['gene_symbol'])
-                        part_table.loc[i, f'{k}_phenoapt_intersect_rank'], part_rr_table.loc[
-                            i, f'{k}_phenoapt_intersect_rank'] = get_rank(symbol, intersect_gene)
-                    if len(REVEL_thresh) != 0:
-                        for thresh in REVEL_thresh:
-                            tsv_revel_filter_dir = f'./{filename}/revel_{thresh}/{case_id}.txt'
-                            tsv_revel_filter = pd.read_csv(tsv_revel_filter_dir, sep='\t', header=None)
-                            intersect_gene = (
-                                pheno_result[pheno_result.gene_symbol.isin(tsv_revel_filter[0])]).reset_index()
-                            intersect_gene = list(intersect_gene['gene_symbol'])
-                            part_table.loc[i, f'{k}_phenoapt_rank_REVEL_{thresh}'], part_rr_table.loc[
-                                i, f'{k}_phenoapt_rank_REVEL_{thresh}'] = get_rank(symbol, intersect_gene)
-                    if len(CADD_thresh) != 0:
-                        for thresh in CADD_thresh:
-                            tsv_cadd_filter_dir = f'./{filename}/cadd_{thresh}/{case_id}.txt'
-                            tsv_cadd_filter = pd.read_csv(tsv_cadd_filter_dir, sep='\t', header=None)
-                            intersect_gene = (
-                                pheno_result[pheno_result.gene_symbol.isin(tsv_cadd_filter[0])]).reset_index()
-                            intersect_gene = list(intersect_gene['gene_symbol'])
-                            part_table.loc[i, f'{k}_phenoapt_rank_CADD_{thresh}'], part_rr_table.loc[
-                                i, f'{k}_phenoapt_rank_CADD_{thresh}'] = get_rank(symbol, intersect_gene)
-
-        if 'Exomiser' in tools:
-            if case_id in case_id_exomiser_tsv_file_dict:
-                rankdf = pd.read_csv(case_id_exomiser_tsv_file_dict[case_id], sep="\t")
-                patho_gene_ID_Exo = list(rankdf['ENTREZ_GENE_ID'])
-                if entrezId in patho_gene_ID_Exo:
-                    rank = patho_gene_ID_Exo.index(entrezId)
-                    rr = 1 / (1 + rank)
-                else:
-                    rank = 'NA'
-                    rr = 0
-            else:
-                rank = 'No_vcf_ranked_by_Exo'
-                rr = 0
-            part_table.loc[i, 'Exomiser_rank'] = rank
-            part_rr_table.loc[i, 'Exomiser_rank'] = rr
-            print(f'Exomiser {rank}')
-
-        if 'Exomiser13.1.0' in tools:
-            if hpo=='hpo_id':
-                print(f'{pwd}/{filename}/Exomiser1310/1310-{case_id}_{inheritance}.genes.tsv')
-                if f'1310-{case_id}_{inheritance}.genes.tsv' in os.listdir(f'{pwd}/{filename}/Exomiser1310'):
-                    rankdf = pd.read_csv(f'{pwd}/{filename}/Exomiser1310/1310-{case_id}_{inheritance}.genes.tsv', sep="\t")
-                    patho_gene_ID_Exo1310 = list(rankdf['ENTREZ_GENE_ID'])
-                    if int(entrezId) in patho_gene_ID_Exo1310:
-                        rank = patho_gene_ID_Exo1310.index(entrezId)
-                        rr = 1 / (1 + rank)
-                    else:
-                        rank = 'NA'
-                        rr = 0
-                else:
-                    rank = 'No_vcf_ranked_by_Exo1310'
-                    rr = 0
-            else:
-                print(f'{pwd}/{filename}/{hpo}_Exomiser1310/1310-{case_id}_{inheritance}.genes.tsv')
-                if f'1310-{case_id}_{inheritance}.genes.tsv' in os.listdir(f'{pwd}/{filename}/{hpo}_Exomiser1310'):
-                    rankdf = pd.read_csv(f'{pwd}/{filename}/{hpo}_Exomiser1310/1310-{case_id}_{inheritance}.genes.tsv',
-                                         sep="\t")
-                    patho_gene_ID_Exo1310 = list(rankdf['ENTREZ_GENE_ID'])
-                    if int(entrezId) in patho_gene_ID_Exo1310:
-                        rank = patho_gene_ID_Exo1310.index(entrezId)
-                        rr = 1 / (1 + rank)
-                    else:
-                        rank = 'NA'
-                        rr = 0
-                else:
-                    rank = 'No_vcf_ranked_by_Exo1310'
-                    rr = 0
-            part_table.loc[i, 'Exomiser13.1.0_rank'] = rank
-            part_rr_table.loc[i, 'Exomiser13.1.0_rank'] = rr
-            print(f'Exomiser13.1.0 {rank}')
+                hpo_id = df.loc[i, hpo]
+                hpo_id_input = [k for k in hpo_id.split(";")]
+        except Exception as e:
+            log.loc[i,'hpo_id_input'] = e
+            continue
 
 
-        if 'HANRD' in tools:
-            rankdf = pd.read_csv(f'{pwd}/{filename}/HANRDoutput/{hpo}_gVCF-diagnosed-cohort-2022-HANRD_genes.out',header=None,sep='\t')
-            rankdf.columns=['id','rank','HGNCid','score','-','gene_note','chr','note']
-            rankdfid = (rankdf['HGNCid'].str.split(':', expand=True))[1]
-            result_hgncid = list(rankdfid)
-            part_table.loc[i, 'HANRD_rank'], part_rr_table.loc[i, 'HANRD_rank'] = get_rank(HGNCid, result_hgncid)
-            if intersect:
-                hgncid_candidate_gene = pd.read_csv(f'./{filename}/candidategene_hgncid/{case_id}.txt',
-                                                       sep='\t', header=None)
-                intersect_gene = [gene_collection for gene_collection in result_hgncid if
-                                  int(gene_collection) in list(hgncid_candidate_gene[0])]
-                intersect_gene = list(intersect_gene)
-                part_table.loc[i, 'HANRD_intersect_rank'], part_rr_table.loc[
-                    i, 'HANRD_intersect_rank'] = get_rank(HGNCid, intersect_gene)
-                if len(REVEL_thresh) != 0:
-                    for thresh in REVEL_thresh:
-                        tsv_revel_filer_hgncid_dir = f'./{filename}/revel_{thresh}_hgncid/{case_id}.txt'
-                        tsv_revel_filer_hgncid = pd.read_csv(tsv_revel_filer_hgncid_dir, sep='\t', header=None)
-                        intersect_gene = [gene_collection for gene_collection in result_hgncid if
-                                          int(gene_collection) in list(tsv_revel_filer_hgncid[0])]
-                        intersect_gene = list(intersect_gene)
-                        part_table.loc[i, f'HANRD_rank_REVEL_{thresh}'], part_rr_table.loc[
-                            i, f'HANRD_rank_REVEL_{thresh}'] = get_rank(HGNCid, intersect_gene)
-                if len(CADD_thresh) != 0:
-                    for thresh in CADD_thresh:
-                        tsv_CADD_filer_hgncid_dir = f'./{filename}/cadd_{thresh}_hgncid/{case_id}.txt'
-                        tsv_CADD_filer_hgncid = pd.read_csv(tsv_CADD_filer_hgncid_dir, sep='\t', header=None)
-                        intersect_gene = [gene_collection for gene_collection in result_hgncid if
-                                          int(gene_collection) in list(tsv_CADD_filer_hgncid[0])]
-                        intersect_gene = list(intersect_gene)
-                        part_table.loc[i, f'HANRD_rank_CADD_{thresh}'], part_rr_table.loc[
-                            i, f'HANRD_rank_CADD_{thresh}'] = get_rank(HGNCid, intersect_gene)
-            #else:
+        symbol = df.loc[i, "Symbol"]
+        inheritance = df.loc[i, 'Inheritance_ADAR']
+        pathogenic_gene_dict = (df[['Symbol', 'entrezGeneId', 'entrezId', 'Ensembl Gene ID', 'HGNC']].loc[i]).to_dict()
+        pathogenic_gene_dict['HGNC'] = str(int(pathogenic_gene_dict['HGNC']))
+        pathogenic_gene_dict['Symbol_inheritance_ADAR'] = symbol + '_' + inheritance
 
 
 
-        if 'PhenoRank' in tools:
-            rankdfP = pd.read_csv(f'{pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv',sep='\t')
-            #rankdfP = rankdfP.reset_index()
-            result_ensemblid = list(rankdfP['GENE'])
-            part_table.loc[i, 'PhenoRank_rank'], part_rr_table.loc[i, 'PhenoRank_rank'] = get_rank(ensemblid,
-                                                                                         result_ensemblid)
-            if intersect:
-                ensemblid_candidate_gene = pd.read_csv(f'./{filename}/candidategene_ensemblid/{case_id}.txt',
-                                                       sep='\t', header=None)
-                intersect_gene = [gene_collection for gene_collection in result_ensemblid if gene_collection in list(ensemblid_candidate_gene[0])]
-                intersect_gene = list(intersect_gene)
-                part_table.loc[i, 'PhenoRank_intersect_rank'], part_rr_table.loc[
-                    i, 'PhenoRank_intersect_rank'] = get_rank(ensemblid, intersect_gene)
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    tsv_revel_filer_ensemblid_dir = f'./{filename}/revel_{thresh}_ensemblid/{case_id}.txt'
-                    tsv_revel_filer_ensemblid = pd.read_csv(tsv_revel_filer_ensemblid_dir, sep='\t', header=None)
-                    intersect_gene = [gene_collection for gene_collection in result_ensemblid if
-                                      gene_collection in list(tsv_revel_filer_ensemblid[0])]
-                    intersect_gene = list(intersect_gene)
-                    part_table.loc[i, f'PhenoRank_rank_REVEL_{thresh}'], part_rr_table.loc[
-                        i, f'PhenoRank_rank_REVEL_{thresh}'] = get_rank(ensemblid, intersect_gene)
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    tsv_CADD_filer_ensemblid_dir = f'./{filename}/cadd_{thresh}_ensemblid/{case_id}.txt'
-                    tsv_CADD_filer_ensemblid = pd.read_csv(tsv_CADD_filer_ensemblid_dir, sep='\t', header=None)
-                    intersect_gene = [gene_collection for gene_collection in result_ensemblid if
-                                      gene_collection in list(tsv_CADD_filer_ensemblid[0])]
-                    intersect_gene = list(intersect_gene)
-                    part_table.loc[i, f'PhenoRank_rank_CADD_{thresh}'], part_rr_table.loc[
-                        i, f'PhenoRank_rank_CADD_{thresh}'] = get_rank(ensemblid, intersect_gene)
+        filedir,tsv_source_mode = dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id)
+        if tsv_source_mode=='no Filtered TSV anywhere':
+            print(f'{case_id} no tsv file, make sure you have manual diagnosis')
+            log.loc[i,'Symbol'] = f'no tsv file'
+            continue
 
-        if 'phenomizer' in tools:
-            def phenomiserpipeline(result):
-                result_rank = list(result['Disease-Name'])
-                part_table.loc[i, 'phenomizer_rank'], part_rr_table.loc[i, 'phenomizer_rank'] = get_phenomizer_rank(
-                    case_id, symbol, result_rank)
-                if intersect:
-                    time = 0
-                    intersect_gene = {}
-                    for gene in list(variation_gene_name):
-                        for k in range(len(result_rank)):
-                            if f'{gene} (' in str(result_rank[k]):
-                                intersect_gene[time] = k
-                                time = time + 1
-                    if time == 0:
-                        part_table.loc[i, 'phenomizer_intersect_rank'], part_rr_table.loc[
-                            i, 'phenomizer_intersect_rank'] = 'NA', 0
-                    else:
-                        intersect_gene = [result_rank[t] for t in set([d for d in intersect_gene.values()])]
-                        part_table.loc[i, 'phenomizer_intersect_rank'], part_rr_table.loc[
-                            i, 'phenomizer_intersect_rank'] = get_phenomizer_rank(case_id, symbol, intersect_gene)
-                if len(REVEL_thresh) != 0:
-                    for thresh in REVEL_thresh:
-                        tsv_revel_filter_dir = f'./{filename}/revel_{thresh}/{case_id}.txt'
-                        tsv_revel_filter = pd.read_csv(tsv_revel_filter_dir, sep='\t', header=None)
-                        time = 0
-                        intersect_gene = {}
-                        for gene in tsv_revel_filter[0]:
-                            for k in range(len(result_rank)):
-                                if f'{gene} (' in str(result_rank[k]):
-                                    intersect_gene[time] = k
-                                    time = time + 1
-                        if time == 0:
-                            part_table.loc[i, f'phenomizer_rank_REVEL_{thresh}'], part_rr_table.loc[
-                                i, f'phenomizer_rank_REVEL_{thresh}'] = 'NA', 0
-                        else:
-                            intersect_gene = [result_rank[t] for t in set([d for d in intersect_gene.values()])]
-                            part_table.loc[i, f'phenomizer_rank_REVEL_{thresh}'], part_rr_table.loc[
-                                i, f'phenomizer_rank_REVEL_{thresh}'] = get_phenomizer_rank(case_id, symbol,
-                                                                                            intersect_gene)
-                if len(CADD_thresh) != 0:
-                    for thresh in CADD_thresh:
-                        tsv_cadd_filter_dir = f'./{filename}/cadd_{thresh}/{case_id}.txt'
-                        tsv_cadd_filter = pd.read_csv(tsv_cadd_filter_dir, sep='\t', header=None)
-                        time = 0
-                        intersect_gene = {}
-                        for gene in tsv_cadd_filter[0]:
-                            for k in range(len(result_rank)):
-                                if f'{gene} (' in str(result_rank[k]):
-                                    intersect_gene[time] = k
-                                    time = time + 1
-                        if time == 0:
-                            part_table.loc[i, f'phenomizer_rank_CADD_{thresh}'], part_rr_table.loc[
-                                i, f'phenomizer_rank_CADD_{thresh}'] = 'NA', 0
-                        else:
-                            intersect_gene = [result_rank[t] for t in set([d for d in intersect_gene.values()])]
-                            part_table.loc[i, f'phenomizer_rank_CADD_{thresh}'], part_rr_table.loc[
-                                i, f'phenomizer_rank_CADD_{thresh}'] = get_phenomizer_rank(case_id, symbol,
-                                                                                           intersect_gene)
-            if hpo=='hpo_id':
-                if f'{case_id}.tsv' in os.listdir(f'{pwd}/{filename}/phenomizeroutput'):
-                    result = pd.read_csv(f'{pwd}/{filename}/phenomizeroutput/{case_id}.tsv',
-                                               sep='\t')
-                    phenomiserpipeline(result)
-                else:
-                    part_table.loc[i, f'phenomizer_rank'], part_rr_table.loc[
-                        i, f'phenomizer_rank']='No_result_by_phenomizer',0
-            else:
-                if f'weight-{case_id}.tsv' in os.listdir(f'{pwd}/{filename}/phenomizeroutput'):
-                    result = pd.read_csv(f'{pwd}/{filename}/phenomizeroutput/weight-{case_id}.tsv',
-                                               sep='\t')
-                    phenomiserpipeline(result)
-                else:
-                    part_table.loc[i, f'phenomizer_rank'], part_rr_table.loc[
-                        i, f'phenomizer_rank']='No_result_by_phenomizer',0
+        part_table.loc[i, 'CaseID'],part_rr_table.loc[i, 'CaseID'],part_rp_table.loc[i, 'CaseID'] = case_id,case_id,case_id
+        part_table.loc[i, 'hpo'],part_rr_table.loc[i, 'hpo'],part_rp_table.loc[i, 'hpo'] = hpo,hpo,hpo
+        part_table.loc[i, 'hpo_id_input'],part_rr_table.loc[i, 'hpo_id_input'],part_rp_table.loc[i, 'hpo_id_input'] = str(hpo_id_input),str(hpo_id_input),str(hpo_id_input)
+        part_table.loc[i, 'Symbol'],part_rr_table.loc[i, 'Symbol'],part_rp_table.loc[i, 'Symbol'] = symbol,symbol,symbol
 
-        if 'LIRICAL' in tools:
-            patho_gene_rank_LIR = {}
-            if case_id in case_id_LIRICAL_tsv_file_dict:
-                rankdf2 = pd.read_csv(case_id_LIRICAL_tsv_file_dict[case_id], sep="\t")
-                patho_gene_ID_LIR = rankdf2['entrezGeneId']
-                df_count = pd.DataFrame(enumerate(patho_gene_ID_LIR))
-                for s in range(len(df_count)):
-                    k = (df_count[df_count[1].isin([df_count.loc[s, 1]])]).reset_index(drop=True)
-                    # print(k)
-                    patho_gene_rank_LIR[k.loc[0, 1]] = k.loc[0, 0]
-                # print(patho_gene_rank_LIR)
+        if collect_variants_tofile:
+            part_rr_table.loc[i, 'Frequency'] = df.loc[i,'Frequency']
+            part_rr_table.loc[i, 'Variant_class'] = df.loc[i, 'Variant_class']
+            part_rr_table.loc[i, 'Inheritance_ADAR'] = df.loc[i, 'Inheritance_ADAR']
+        if collect_organ:
+            part_rr_table.loc[i, f'{hpo}_organ_system'] =df.loc[i,f'{hpo}_organ_system']
+            #part_rr_table.loc[i, f'{hpo}_organ_system_number'] = df.loc[i, f'{hpo}_organ_system_number']
 
-            else:
-                patho_gene_rank_LIR[entrezGeneId] = 'No_vcf_ranked_by_LIR'
-            rank = patho_gene_rank_LIR.get(entrezGeneId, 'NA')
-            if rank == 'NA' or rank == 'No_vcf_ranked_by_LIR':
-                rr = 0
-            else:
-                rr = 1 / (rank + 1)
-            part_table.loc[i, 'LIRICAL_rank'] = rank
-            part_rr_table.loc[i, 'LIRICAL_rank'] = rr
+        mode_dict = {'result': {'PhenoGenius': 'Symbol', 'phrank': 'Ensembl Gene ID', 'phenolyzer': 'Symbol',
+                                'GADO': 'Ensembl Gene ID','phenoapt':'Symbol','HANRD':'HGNC','PhenoRank':'Ensembl Gene ID',
+                                'phenomizer':'Symbol'},
+                     'dir': {'PhenoGenius': f'{hpo}_PhenoGenius_output/{case_id}.tsv',
+                             'phrank': f'phrankoutput/{case_id}_{hpo}_nogenelist_phrank_rank.tsv',
+                             'phenolyzer': f'phenolyzeroutput/{case_id}_{hpo}.final_gene_list',
+                             'GADO': f'GADOoutput/{case_id}.txt','phenoapt':f'phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',
+                             'HANRD':f'HANRDoutput/output/{case_id}_{hpo}.tsv',
+                             'PhenoRank':f'PhenoRankoutput/{case_id}_{hpo}.tsv',
+                             'phenomizer':f'phenomizeroutput/{hpo}/{case_id}.tsv'},
+                     'column': {'PhenoGenius': 'gene_symbol', 'phrank': '1', 'phenolyzer': 'Gene',
+                                'GADO': 'Ensg','phenoapt':'gene_symbol',
+                                'HANRD':'HGNCid',
+                                'PhenoRank':'GENE',
+                                'phenomizer':'Disease-Name'}
+                     }
+
+        if hpo == 'Weight':
+            def get_phenoapt_result_dir(k):
+                if k == 'all_hpo_plus_weight':
+                    pheno_result_dir = f'phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv'
+                    return pheno_result_dir
+                if k == 'only_weight_hpo_no_weight':
+                    pheno_result_dir = f'phenoaptoutput/{case_id}_only_{hpo}_hpo_no_weight_phenoapt_rank.tsv'
+                    return pheno_result_dir
+                if k == 'only_weight_hpo_weight':
+                    pheno_result_dir = f'phenoaptoutput/{case_id}_only_{hpo}_hpo_weight_phenoapt_rank.tsv'
+                    return pheno_result_dir
+            for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']:
+                tools = tools + [f'{k}_phenoapt']
+                mode_dict['result'][f'{k}_phenoapt'] = 'Symbol'
+                mode_dict['dir'][f'{k}_phenoapt'] = get_phenoapt_result_dir(k)
+                mode_dict['column'][f'{k}_phenoapt'] = 'gene_symbol'
+
+
+        ## pheno-only tools table
+        for tool in tools:
+            if tool in mode_dict['result'].keys():
+                try:
+                    tool_rank_tsv = pd.read_csv(f"{pwd}/{filename}/{mode_dict['dir'][tool]}", sep='\t')
+                    tool_gene_list = list(tool_rank_tsv[mode_dict['column'][tool]])
+                    if tool=='HANRD':
+                        tool_gene_list = [id.split(':')[1] for id in tool_gene_list]
+                    part_table, part_rr_table, part_rp_table = process_rank_result_table(tool, mode_dict['result'][tool], tool_gene_list, case_id, i, pathogenic_gene_dict, pwd, filename,
+                                              intersect, REVEL_thresh, CADD_thresh, part_table, part_rr_table, part_rp_table)
+                    print(f'{tool} ok')
+                except Exception as e:
+                    log.loc[i,tool] = e
+        ## 输入结果直接包含筛选，多种output，不需要和txt intersect
+        file_dir_dict = {
+            'Exomiser':{'original':f'{hpo}_Exomiseroutput/{case_id}_{inheritance}.genes.tsv',
+                        'column':'ENTREZ_GENE_ID',
+                        'result':'entrezId'},
+            'phen2gene':{'original':f'phen2geneoutput_nolist/{case_id}-phen2gene-nolist-output.txt',
+                         'column':'ID',
+                         'result':'entrezId'},
+            'Exomiser13.1.0': {'original': f'{hpo}_Exomiser1310output/{case_id}.genes.tsv',
+                             'column':'ID',
+                             'result':'Symbol_inheritance_ADAR'},
+            'LIRICAL': {'original': f'{hpo}_LIRICALoutput/{case_id}.tsv',
+                        'column':'entrezGeneId',
+                        'result':'entrezGeneId'}
+        }
+        if intersect:
+            file_dir_dict['phen2gene']['intersect'] = f'phen2geneoutput/{case_id}-phen2gene-candidategene-output.txt'
+            processdict(file_dir_dict, 'intersect',hpo,case_id,inheritance)
+        if len(REVEL_thresh)!=0:
+            for thresh in REVEL_thresh:
+                file_dir_dict['phen2gene'][f'revel_{thresh}'] = f'phen2geneoutput/{case_id}-phen2gene-revel_{thresh}-output.txt'
+                processdict(file_dir_dict, f'revel_{thresh}',hpo,case_id,inheritance)
+        if  len(CADD_thresh)!=0:
+            for thresh in CADD_thresh:
+                file_dir_dict['phen2gene'][
+                    f'cadd_{thresh}'] = f'phen2geneoutput/{case_id}-phen2gene-cadd_{thresh}-output.txt'
+                processdict(file_dir_dict, f'cadd_{thresh}',hpo,case_id,inheritance)
+
+            ##准备好了integ需要的dict,处理table
+        for tool in tools:
+            if tool in file_dir_dict.keys():
+                if tool in log.columns:
+                    log.drop(tool, inplace=True, axis=1)
+                for mode in file_dir_dict[list(file_dir_dict.keys())[0]].keys():
+                    if mode not in ['column','result']:
+                        try:
+                            tool_rank_tsv = pd.read_csv(f"{pwd}/{filename}/{file_dir_dict[tool][mode]}", sep='\t')
+                            tool_gene_list = list(tool_rank_tsv[file_dir_dict[tool]['column']])
+                            if mode =='original':
+                                part_table.loc[i, f'{tool}_rank'], part_rr_table.loc[i, f'{tool}_rank'], part_rp_table.loc[
+                                    i, f'{tool}_rank'] = get_rank(pathogenic_gene_dict[file_dir_dict[tool]['result']], tool_gene_list)
+                            else:
+                                part_table.loc[i, f'{tool}_rank_{mode}'], part_rr_table.loc[i, f'{tool}_rank_{mode}'], part_rp_table.loc[
+                                    i, f'{tool}_rank_{mode}'] = get_rank(pathogenic_gene_dict[file_dir_dict[tool]['result']], tool_gene_list)
+                            print(f'{tool} ok')
+                        except Exception as e:
+                            if f'{tool}_{mode}' not in log.columns:
+                                loginfo = ['' for k in range(len(log)-1)] + [str(e)]
+                                log[f'{tool}_{mode}'] = loginfo
+                            else:
+                                log.loc[i,f'{tool}_{mode}'] = str(e)
 
         if 'Phen_gen' in tools:
-            part_table.loc[i, 'Phen_gen_rank'], part_rr_table.loc[i, 'Phen_gen_rank'] = phen_gen(case_id, pwd, hpo)
+            try:
+                part_table.loc[i, 'Phen_gen_rank'], part_rr_table.loc[i, 'Phen_gen_rank'] = phen_gen(case_id, pwd, hpo)
+                print('phen_gen ok')
+            except Exception as e:
+                log.loc[i, 'Phen_gen'] = e
+            ## 转化成作图数据
 
-        ## 转化成作图数据
-
-        if part_table.loc[i, 'LIRICAL_rank'] != 'No_vcf_ranked_by_LIR':
+        if svcf_vcf_adress_df.loc[case_id,'vcf_file_address'] != 0: ##'NA'是没有结果，nan是找结果的过程中有bug
             part_table_for_R.loc[i] = part_table.loc[i]
             part_rr_table_for_R.loc[i] = part_rr_table.loc[i]
+            part_rp_table_for_R.loc[i] = part_rp_table.loc[i]
             ## 替换排名
             for column in part_table_for_R.columns:
                 if 'rank' in column:
-                    rank_value = part_table_for_R.loc[i, column]
-                    if rank_value != 'NA':
+                    rank_value =part_table_for_R.loc[i, column]
+                    if str(rank_value) != 'NA' and str(rank_value) != 'nan':
+                        rank_value = int(rank_value)
                         if rank_value == 0:
                             part_table_for_R.loc[i, column] = 'TOP1'
                         if rank_value >= 1 and rank_value <= 4:
@@ -575,434 +355,70 @@ def statistic_to_table(df,case_ids,pwd,filename,hpo,tools,intersect,REVEL_thresh
                             part_table_for_R.loc[i, column] = 'TOP100'
                         if rank_value > 99:
                             part_table_for_R.loc[i, column] = '>100'
+                    print(f'{column} rank count ok')
             ## 替换NA
+            if 'phenoapt' in tools and hpo == 'Weight':
+                tools = tools+[f'{k}_phenoapt' for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']]
             for tool in tools:
-                if tool in ['phrank', 'phenolyzer', 'GADO', 'phen2gene','PhenoRank','HANRD','phenomizer']:
-                    if part_table_for_R.loc[i, f'{tool}_rank'] == 'NA':
-                        for column in part_table_for_R.columns:
-                            if tool in str(column):
-                                part_table_for_R.loc[i, column] = 'not ranked'
-                    else:
-                        if intersect:
-                            if part_table_for_R.loc[i, f'{tool}_intersect_rank'] == 'NA':
-                                for column in part_table_for_R.columns:
-                                    if tool in str(column):
-                                        if column != f'{tool}_rank':
-                                            part_table_for_R.loc[i, column] = 'not_in_filtered_tsv'
-                            else:
-                                if len(REVEL_thresh) != 0:
-                                    thresh_na = []
-                                    for thresh in REVEL_thresh:
-                                        # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                        if part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}'] == 'NA':
-                                            thresh_na = thresh_na + [thresh]
-                                    if len(thresh_na) != 0:
-                                        filter_thresh = min(thresh_na)
-                                        for thresh in thresh_na:
-                                            part_table_for_R.loc[
-                                                i, f'{tool}_rank_REVEL_{thresh}'] = f'filtered_by_REVEL_{filter_thresh}'
-                                if len(CADD_thresh) != 0:
-                                    thresh_na = []
-                                    for thresh in CADD_thresh:
-                                        # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                        if part_table_for_R.loc[i, f'{tool}_rank_CADD_{thresh}'] == 'NA':
-                                            thresh_na = thresh_na + [thresh]
-                                    if len(thresh_na) != 0:
-                                        filter_thresh = min(thresh_na)
-                                        for thresh in thresh_na:
-                                            part_table_for_R.loc[
-                                                i, f'{tool}_rank_CADD_{thresh}'] = f'filtered_by_CADD_{filter_thresh}'
-
-                if tool == 'phenoapt':
-                    if hpo == 'hpo_id':
-                        if part_table_for_R.loc[i, f'{tool}_rank'] == 'NA':
+                if part_table_for_R.loc[i, f'{tool}_rank'] == 'NA':
+                    for column in part_table_for_R.columns:
+                        if tool in str(column):
+                            part_table_for_R.loc[i, column] = 'not ranked'
+                else:
+                    if intersect:
+                        if part_table_for_R.loc[i, f'{tool}_rank_intersect'] == 'NA':
                             for column in part_table_for_R.columns:
                                 if tool in str(column):
-                                    part_table_for_R.loc[i, column] = 'not ranked'
+                                    if column != f'{tool}_rank':
+                                        part_table_for_R.loc[i, column] = 'not_in_filtered_tsv'
                         else:
-                            if intersect:
-                                if part_table_for_R.loc[i, f'{tool}_intersect_rank'] == 'NA':
-                                    for column in part_table_for_R.columns:
-                                        if tool in str(column):
-                                            if column != f'{tool}_rank':
-                                                part_table_for_R.loc[i, column] = 'not_in_filtered_tsv'
-                                else:
-                                    if len(REVEL_thresh) != 0:
-                                        thresh_na = []
-                                        for thresh in REVEL_thresh:
-                                            # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                            if part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}'] == 'NA':
-                                                thresh_na = thresh_na + [thresh]
-                                        if len(thresh_na) != 0:
-                                            filter_thresh = min(thresh_na)
-                                            for thresh in thresh_na:
-                                                part_table_for_R.loc[
-                                                    i, f'{tool}_rank_REVEL_{thresh}'] = f'filtered_by_REVEL_{filter_thresh}'
-                                    if len(CADD_thresh) != 0:
-                                        thresh_na = []
-                                        for thresh in CADD_thresh:
-                                            # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                            if part_table_for_R.loc[i, f'{tool}_rank_CADD_{thresh}'] == 'NA':
-                                                thresh_na = thresh_na + [thresh]
-                                        if len(thresh_na) != 0:
-                                            filter_thresh = min(thresh_na)
-                                            for thresh in thresh_na:
-                                                part_table_for_R.loc[
-                                                    i, f'{tool}_rank_CADD_{thresh}'] = f'filtered_by_CADD_{filter_thresh}'
-
-                    else:
-                        for k in ['all_hpo_plus_weight', 'only_weight_hpo_weight', 'only_weight_hpo_no_weight']:
-                            if part_table_for_R.loc[i, f'{k}_{tool}_rank'] == 'NA':
-                                for column in part_table_for_R.columns:
-                                    if tool in str(column):
-                                        part_table_for_R.loc[i, column] = 'not ranked'
-                            else:
-                                if intersect:
-                                    if part_table_for_R.loc[i, f'{k}_{tool}_intersect_rank'] == 'NA':
-                                        for column in part_table_for_R.columns:
-                                            if tool in str(column):
-                                                if column != f'{k}_{tool}_rank':
-                                                    part_table_for_R.loc[i, column] = 'not_in_filtered_tsv'
-                                    else:
-                                        if len(REVEL_thresh) != 0:
-                                            thresh_na = []
-                                            for thresh in REVEL_thresh:
-                                                # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                                if part_table_for_R.loc[i, f'{k}_{tool}_rank_REVEL_{thresh}'] == 'NA':
-                                                    thresh_na = thresh_na + [thresh]
-                                            if len(thresh_na) != 0:
-                                                filter_thresh = min(thresh_na)
-                                                for thresh in thresh_na:
-                                                    part_table_for_R.loc[
-                                                        i, f'{k}_{tool}_rank_REVEL_{thresh}'] = f'filtered_by_REVEL_{filter_thresh}'
-                                        if len(CADD_thresh) != 0:
-                                            thresh_na = []
-                                            for thresh in CADD_thresh:
-                                                # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
-                                                if part_table_for_R.loc[i, f'{k}_{tool}_rank_CADD_{thresh}'] == 'NA':
-                                                    thresh_na = thresh_na + [thresh]
-                                            if len(thresh_na) != 0:
-                                                filter_thresh = min(thresh_na)
-                                                for thresh in thresh_na:
-                                                    part_table_for_R.loc[
-                                                        i, f'{k}_{tool}_rank_CADD_{thresh}'] = f'filtered_by_CADD_{filter_thresh}'
-                if tool in ['Exomiser', 'LIRICAL', 'Phen_gen','Exomiser13.1.0']:
+                            if len(REVEL_thresh) != 0:
+                                thresh_na = []
+                                for thresh in REVEL_thresh:
+                                    # part_table_for_R.loc[i, f'{tool}_rank_REVEL_{thresh}']
+                                    if part_table_for_R.loc[i, f'{tool}_rank_revel_{thresh}'] == 'NA':
+                                        thresh_na = thresh_na + [thresh]
+                                if len(thresh_na) != 0:
+                                    filter_thresh = min(thresh_na)
+                                    for thresh in thresh_na:
+                                        part_table_for_R.loc[
+                                            i, f'{tool}_rank_REVEL_{thresh}'] = f'filtered_by_revel_{filter_thresh}'
+                            if len(CADD_thresh) != 0:
+                                thresh_na = []
+                                for thresh in CADD_thresh:
+                                    if part_table_for_R.loc[i, f'{tool}_rank_cadd_{thresh}'] == 'NA':
+                                        thresh_na = thresh_na + [thresh]
+                                if len(thresh_na) != 0:
+                                    filter_thresh = min(thresh_na)
+                                    for thresh in thresh_na:
+                                        part_table_for_R.loc[
+                                            i, f'{tool}_rank_cadd_{thresh}'] = f'filtered_by_cadd_{filter_thresh}'
+                print(f'{tool} NA replace ok')
+                if tool == 'Phen_gen':
                     if part_table_for_R.loc[i, f'{tool}_rank'] == 'NA':
                         part_table_for_R.loc[i, f'{tool}_rank'] = f'not ranked'
-
-            ##if TOPpercent:
-
-
-    part_table.to_csv(f'{hpo}_{len(tools)}_rank_len_{len(df)}.tsv', sep='\t')
-    part_rr_table.to_csv(f'{hpo}_{len(tools)}_rr_len_{len(df)}.tsv', sep='\t')
-    part_table_for_R.to_csv(f'{hpo}_{len(tools)}_rank_with_vcf_len_{len(df)}.tsv', sep='\t')
-    part_rr_table_for_R.to_csv(f'{hpo}_{len(tools)}_rr_with_vcf_len_{len(df)}.tsv', sep='\t')
-
-
-
-def file_prepare(cohort_df, pwd, filename,REVEL_thresh=[],CADD_thresh=[],refresh=False,intersect=False):
-    if len(REVEL_thresh) != 0:
-        genertatevcf_zs_diag_dropbox_tsv(cohort_df,pwd=pwd, filename=filename, refresh=refresh)
-        ##检查整个队列中必要的dropbox到vcf以及revel注释的vcf是否已有，没有就生成一个,储存在filename下的文件夹中；可能找不到dropboxtsv，pirint no tsv
-    for i in tqdm(range(len(cohort_df))):
-        try:
-            case_id = cohort_df.loc[i, 'Blood ID']
-            if get_case_id_file(case_id, 'sporadic') != 0:
-                filedir = get_case_id_file(case_id, 'sporadic')
-            else:
-                if get_case_id_file(case_id, 'trio') != 0:
-                    filedir = get_case_id_file(case_id, 'trio')
-                else:
-                    print(f'no dropbox tsv file for {case_id}')
-                    continue
-            variation = pd.read_csv(filedir, sep="\t")
-            variation_gene_name = variation['Gene_name']
-            variation_gene_list = list(set(variation_gene_name))
-
-            if intersect:
-                # #检查是否需要产生新的phen2gene分析使用的candidate文件
-                candidate_file(df2list=variation_gene_list, pwd=pwd, filename=filename, profile='candidategene', case_id=case_id)
-                ##检查candidate gene 的 ensenmble file是否ready
-                print('candidategene,ready')
-                ensemblidfile(genelist=variation_gene_list, pwd=pwd, filename=filename, case_id=case_id,
-                               profile='candidategene_ensemblid', refresh=refresh)
-                print('candidategene_ensemblid,ready')
-                ##检查candidate gene 的 hgnc file是否ready
-                hgncidfile(genelist=variation_gene_list, pwd=pwd, filename=filename, case_id=case_id,
-                              profile='candidategene_hgncid', refresh=refresh)
-                print('candidategene_hgncid,ready')
+                        print(f'Phen_gen NA replace ok')
+                ##if TOPpercent:
+            print(f'{case_id} statistic ok')
+        log.to_csv(f'{pwd}/{filename}/log/statistic.csv')
+        part_table.to_csv(f'{hpo}_{len(tools)}_rank_len_{len(df)}.tsv', sep='\t')
+        part_rr_table.to_csv(f'{hpo}_{len(tools)}_rr_len_{len(df)}.tsv', sep='\t')
+        part_rp_table.to_csv(f'{hpo}_{len(tools)}_rp_len_{len(df)}.tsv', sep='\t')
+        part_table_for_R.to_csv(f'{hpo}_{len(tools)}_rank_with_vcf_len_{len(df)}.tsv', sep='\t')
+        part_rr_table_for_R.to_csv(f'{hpo}_{len(tools)}_rr_with_vcf_len_{len(df)}.tsv', sep='\t')
+        part_rp_table_for_R.to_csv(f'{hpo}_{len(tools)}_rp_with_vcf_len_{len(df)}.tsv', sep='\t')
 
 
-            if len(REVEL_thresh) != 0:
-                for thresh in REVEL_thresh:
-                    variation_revel = tsv_filtered_by_revel(df_input=variation, case_id=case_id,pwd=pwd, filename=filename,
-                                                            thresh=thresh)
-                    ##print(variation_revel[:1])
-                    ## df_input, case_id, pwd, filename, thresh
-                    variation_revel_gene_list = list(set(variation_revel['Gene_name']))
-                    candidate_file(variation_revel_gene_list, pwd, filename, case_id, f'revel_{thresh}')
-                    print(f'revel_{thresh} ready')
-                    ensemblidfile(variation_revel_gene_list, pwd, case_id, filename,
-                                   f'revel_{thresh}_ensemblid', refresh=refresh)
-                    print(f'revel_{thresh}_ensemblid ready')
-                    hgncidfile(variation_revel_gene_list, pwd, case_id, filename, f'revel_{thresh}_hgncid',
-                               refresh=refresh)
-                    print(f'revel_{thresh}_hgncid ready')
-                    ##检查是否有按照阈值filter过的genename.txt
-
-            if len(CADD_thresh) != 0:
-                for thresh in CADD_thresh:
-                    variation_cadd = patho_filter_n(variation, thresh)
-                    variation_cadd_gene_list = list(set(variation_cadd['Gene_name']))
-                    candidate_file(variation_cadd_gene_list, pwd, filename, case_id, f'cadd_{thresh}')
-                    ##df2list, pwd, filename, case_id, profile, refresh
-                    print(f'cadd_{thresh} ready')
-                    ensemblidfile(variation_cadd_gene_list, pwd, case_id, filename, f'cadd_{thresh}_ensemblid',
-                                   refresh=refresh)
-                    print(f'cadd_{thresh}_ensemblid ready')
-                    hgncidfile(variation_cadd_gene_list, pwd, case_id, filename, f'cadd_{thresh}_hgncid',
-                                  refresh=refresh)
-                    ##检查是否有按照阈值filter过的genename.txt,refre指的是是否重新查询ensembleid，filterfile是每次都在重新生成
-                    ## genelist, pwd, case_id, filename='scoliosis_gVCF_from_zs_updating', profile='candidategene_ensemblid',refresh=False
-                    print(f'cadd_{thresh}_hgncid ready')
-
-        except Exception as e:
-            print(e)
-
-def get_rank(pathogene,rank_df):
-    if pathogene in rank_df:
-        rank = rank_df.index(pathogene)
+def get_rank(pathogene,rank_list):
+    if pathogene in rank_list:
+        rank = rank_list.index(pathogene)
         rr = 1 / (rank + 1)
-        rN = (rank+1)/(len(rank_df))
+        rp = (rank+1)/(len(rank_list))
     else:
         rank = 'NA'
         rr = 0
-        rN = 'NA'
-    return rank, rr,rN
-
-def load_revel_filter_df(filename, case_id, thresh):
-    tsv_revel_filter_dir = f'./{filename}/revel_{thresh}/{case_id}.txt'
-    tsv_revel_filter = pd.read_csv(tsv_revel_filter_dir, sep='\t')
-    tsv_revel_filer_ensemblid_dir = f'./{filename}/revel_{thresh}_ensemblid/{case_id}.txt'
-    tsv_revel_filer_ensemblid = pd.read_csv(tsv_revel_filer_ensemblid_dir, sep='\t')
-    return tsv_revel_filter, tsv_revel_filer_ensemblid
-
-
-def load_cadd_filter_df(filename, case_id, thresh):
-    tsv_CADD_filter_dir = f'./{filename}/cadd_{thresh}/{case_id}.txt'
-    tsv_CADD_filter = pd.read_csv(tsv_CADD_filter_dir, sep='\t')
-    tsv_CADD_filer_ensemblid_dir = f'./{filename}/cadd_{thresh}_ensemblid/{case_id}.txt'
-    tsv_CADD_filer_ensemblid = pd.read_csv(tsv_CADD_filer_ensemblid_dir, sep='\t')
-    return tsv_CADD_filter, tsv_CADD_filer_ensemblid
-
-
-def candidate_file(df2list, pwd, filename, case_id, profile):
-    if profile not in os.listdir(f'{pwd}/{filename}/'):
-        os.system(f'mkdir {pwd}/{filename}/{profile}')
-    if 'candidategene' not in os.listdir(f'{pwd}/{filename}/'):
-        os.system('mkdir candidategene')
-    candidate_gene_list_no_dup = list(set(df2list))
-    candidate_gene_list = pd.DataFrame(columns=[0])
-    candidate_gene_list[0] = candidate_gene_list_no_dup
-    candidate_gene_list.to_csv(f'{pwd}/{filename}/{profile}/{case_id}.txt', index=False, header=False)
-    ##每次都存新的gene list
-
-def hgncidfile(genelist, pwd, case_id, filename='scoliosis_gVCF_from_zs_updating', profile='candidategene_hgncid',refresh=False):
-    if profile not in os.listdir(f'{pwd}/{filename}/'):
-        os.system(f'mkdir {pwd}/{filename}/{profile}')
-    if 'candidategene_hgncid' not in os.listdir(f'{pwd}/{filename}/'):
-        os.system(f'mkdir {pwd}/{filename}/candidategene_hgncid')
-    if f'{case_id}_index.tsv' not in os.listdir(f'./{filename}/candidategene_hgncid/'):
-        output = pd.DataFrame(columns=[0])
-        for gene_name_keys in genelist:
-            try:
-                id_result = searchHGNCid(gene_name_keys)
-                output.loc[gene_name_keys] = id_result
-                print(id_result)
-            except Exception as e:
-                print(e)
-        output.to_csv(f'./{filename}/candidategene_hgncid/{case_id}.txt', index=False, header=False)
-        output.to_csv(f'./{filename}/candidategene_hgncid/{case_id}_index.tsv', sep='\t', index=True, header=False)
-    else:
-        if refresh:
-            output = pd.DataFrame(columns=[0])
-            for gene_name_keys in genelist:
-                try:
-                    id_result = searchHGNCid(gene_name_keys)
-                    output.loc[gene_name_keys] = id_result
-                except Exception as e:
-                    print(e)
-            output.to_csv(f'./{filename}/candidategene_hgncid/{case_id}.txt', index=False, header=False)
-            output.to_csv(f'./{filename}/candidategene_hgncid/{case_id}_index.tsv', sep='\t', index=True,
-                          header=False)
-        if profile != 'candidategene_hgncid':
-            hgncids_df = pd.read_csv(f'./{filename}/candidategene_hgncid/{case_id}_index.tsv', sep='\t', header=None)
-            hgncids_df = hgncids_df.reset_index()
-            output_filter = hgncids_df[hgncids_df[0].isin(genelist)][1]
-            ##print(output_filter[:5])
-            output_filter.to_csv(f'./{filename}/{profile}/{case_id}.txt', index=False, header=False)
-            ##每次都重新储存了filter后的新ensembleid
-
-
-def ensemblidfile(genelist, pwd, case_id, filename='scoliosis_gVCF_from_zs_updating', profile='candidategene_ensemblid',refresh=False):
-    if profile not in os.listdir(f'{pwd}/{filename}/'):
-        os.system(f'mkdir {pwd}/{filename}/{profile}')
-    if 'candidategene_ensemblid' not in os.listdir(f'{pwd}/{filename}/'):
-        os.system(f'mkdir {pwd}/{filename}/candidategene_ensemblid')
-    if f'{case_id}_index.tsv' not in os.listdir(f'./{filename}/candidategene_ensemblid/'):
-        output = pd.DataFrame(columns=[0])
-        for gene_name_keys in genelist:
-            try:
-                id_result = searchensemblid(gene_name_keys)
-                output.loc[gene_name_keys] = id_result
-            except Exception as e:
-                print(e)
-        output.to_csv(f'./{filename}/candidategene_ensemblid/{case_id}.txt', index=False, header=False)
-        output.to_csv(f'./{filename}/candidategene_ensemblid/{case_id}_index.tsv', sep='\t', index=True, header=False)
-    else:
-        if refresh:
-            output = pd.DataFrame(columns=[0])
-            for gene_name_keys in genelist:
-                try:
-                    id_result = searchensemblid(gene_name_keys)
-                    output.loc[gene_name_keys] = id_result
-                except Exception as e:
-                    print(e)
-            output.to_csv(f'./{filename}/candidategene_ensemblid/{case_id}.txt', index=False, header=False)
-            output.to_csv(f'./{filename}/candidategene_ensemblid/{case_id}_index.tsv', sep='\t', index=True,
-                          header=False)
-        if profile != 'candidategene_ensemblid':
-            ensemblids_df = pd.read_csv(f'./{filename}/candidategene_ensemblid/{case_id}_index.tsv', sep='\t', header=None)
-            ensemblids_df = ensemblids_df.reset_index()
-            output_filter = ensemblids_df[ensemblids_df[0].isin(genelist)][1]
-            ##print(output_filter[:5])
-            output_filter.to_csv(f'./{filename}/{profile}/{case_id}.txt', index=False, header=False)
-            ##每次都重新储存了filter后的新ensembleid
-
-def getvcf_from_zs_gz(pwd,filename):
-    ## 需要固定的.gz文件名称，需要批量提取的队列名单由xlsx整理找zs获得,每次刷新list，但是不会refresh已经分离出来的个人vcf；单人vcf则直接下载
-    os.system(f'{pwd}/{filename}/bash dividevcf.sh')
-    print('vcf unziped from .gz')
-    ## 从gz到单个vcf的脚本
-
-def read_xlsx(path, sheet):
-    wb = load_workbook(path)
-    ws = wb[sheet]
-    sh = pd.DataFrame(ws.values)
-    df = sh.rename(columns=sh.loc[0])[1:].reset_index(drop=True)
-    return df
-
-
-def searchensemblid(genesymbol):
-    server = "https://rest.ensembl.org"
-    ext = f"/xrefs/symbol/homo_sapiens/{genesymbol}?external_db=HGNC"
-    r = requests.get(server + ext, headers={"Content-Type": "application/json"})
-    if not r.ok:
-        r.raise_for_status()
-        sys.exit()
-    decoded = r.json()
-    print(decoded[0]['id'])
-    return decoded[0]['id']
-
-import httplib2 as http
-def searchHGNCid(genesymbol):
-    try:
-        from urlparse import urlparse
-    except ImportError:
-        from urllib.parse import urlparse
-
-    headers = {
-        'Accept': 'application/json',
-    }
-
-    uri = 'http://rest.genenames.org'
-    path = f'/search/symbol:{genesymbol}'
-
-    target = urlparse(uri + path)
-    method = 'GET'
-    body = ''
-
-    h = http.Http()
-
-    response, content = h.request(
-        target.geturl(),
-        method,
-        body,
-        headers)
-
-    if response['status'] == '200':
-    # assume that content is a json reply
-    # parse content with the json module
-        data = json.loads(content)
-        #print('Symbol:' + data['response']['docs'][0]['hgnc_id'])
-        HGNCid = data['response']['docs'][0]['hgnc_id']
-        HGNCid = HGNCid.split(':')[1]
-        return HGNCid
-    else:
-        #print('Error detected: ' + response['status'])
-        return 'Error'
-
-
-# 读取诊断表格
-def read_diagnose_xlsx(path):
-    wb = xlrd.open_workbook(path)
-    sh = wb.sheet_by_name('Sheet1')
-    print(sh.nrows)
-    print(sh.ncols)
-    print(sh.row_values(0))
-    data = [sh.row_values(i) for i in range(1, sh.nrows)]
-    df = pd.DataFrame(data=data, columns=sh.row_values(0))
-    case_ids = df['CaseID']
-    print(case_ids)
-    return df, case_ids
-
-
-def read_gvcf_diagnosis_xlsx(path):
-    wb = xlrd.open_workbook(path)
-    sh = wb.sheet_by_name('Sheet1')
-    data = [sh.row_values(i) for i in range(1, sh.nrows)]
-    df = pd.DataFrame(data=data, columns=sh.row_values(0))
-    return df
-
-
-# 获取case_id与相应的tsv文件路径的映射关系
-def get_case_id_file_map(case_ids,tsv_dir='/Users/liyaqi/Dropbox/Filtered-SNV-all/Sporadic-WES-All'):
-    case_id_tsv_file_map = {}
-    files = os.listdir(tsv_dir)
-    for case_id in case_ids:
-        for file_name in files:
-            if case_id in file_name:
-                case_id_tsv_file_map[case_id] = os.path.join(tsv_dir, file_name)
-    return case_id_tsv_file_map
-
-
-def get_case_id_file(case_id, mode,pwd,filename,old_dir='/Users/liyaqi/Dropbox/Filtered-SNV-all',manual_dir = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/scoliosis_gVCF_from_zs_updating/manually_downloaded_vcf',filetype='tsv'):
-    if mode in ['sporadic','trio']:
-        tsv_dir = os.path.join(old_dir,f'{mode}-WES-All')
-        files = os.listdir(tsv_dir)
-        for file_name in files:
-            if case_id in file_name:
-                case_id_tsv_file = os.path.join(tsv_dir, file_name)
-                return case_id_tsv_file
-        return 0
-    if mode == 'manual':
-        files = os.listdir(manual_dir)
-        for file_name in files:
-            if case_id in file_name:
-                if f'.flt.{filetype}' in file_name:
-                    case_id_tsv_file = os.path.join(manual_dir, file_name)
-                    return case_id_tsv_file
-        return 0
-    if mode == 'vcfgz':
-        vcfgz_dir = os.path.join(f'{pwd}/{filename}', f'vcf')
-        files = os.listdir(vcfgz_dir)
-        for file_name in files:
-            if case_id in file_name:
-                case_id_tsv_file = os.path.join(vcfgz_dir, file_name)
-                return case_id_tsv_file
-        return 0
-    ##获取一些原始数据manual的vcf和tsv，vcfgz解压来的vcf,old tsv
-
+        rp= 'NA'
+    return rank, rr,rp
 
 
 def get_case_id_integ_file_map(pwd, filename, integ, case_ids, hpo):
@@ -1020,461 +436,18 @@ def get_case_id_integ_file_map(pwd, filename, integ, case_ids, hpo):
     return case_id_tsv_file_map
 
 
+def read_xlsx(path, sheet):
+    wb = load_workbook(path)
+    ws = wb[sheet]
+    sh = pd.DataFrame(ws.values)
+    df = sh.rename(columns=sh.loc[0])[1:].reset_index(drop=True)
+    return df
+
+
 def containtype(biao, type):
     data_mut = biao[biao["Mutation_type"].str.contains(type)]
     return data_mut
     # 包含字符串type=“”的rows，Na的单元格自动去掉
-
-
-def selectsmall(biao, name, thresh):
-    data_mut1 = biao[biao[name] != "."]
-    data_mut3 = data_mut1[data_mut1[name] != "nan"]  ## df,"Exac"
-
-    def is_float(x):
-        try:
-            float(x)
-        except ValueError:
-            return False
-        return True
-
-    data_mut12 = data_mut3[data_mut3[name].apply(lambda x: is_float(x))]
-    data_mut12[name] = pd.to_numeric(data_mut12[name], errors='raise')
-    data_mut2 = (data_mut12[(data_mut12[name]) < thresh].append(biao[biao[name] == "."])).append(
-        biao[biao[name] == "nan"])
-    return data_mut2
-
-
-def selectbig(biao, name, thresh):
-    data_mut1 = biao[biao[name] != "."]
-    data_mut3 = data_mut1[data_mut1[name] != "nan"]  ## df,"Exac"
-
-    def is_float(x):
-        try:
-            float(x)
-        except ValueError:
-            return False
-        return True
-
-    data_mut12 = data_mut3[data_mut3[name].apply(lambda x: is_float(x))]
-    data_mut12[name] = pd.to_numeric(data_mut12[name], errors='raise')
-    data_mut2 = (data_mut12[data_mut12[name] > thresh].append(biao[biao[name] == "."])).append(
-        biao[biao[name] == "nan"])
-    return data_mut2
-
-
-def patho_filter_n(df, threshold):
-    data3 = selectsmall(
-        selectsmall(selectsmall(selectsmall(df, "ExAC_AF", 0.01), "ExAC_EAS_AF", 0.01), "gnomAD_genome_EAS", 0.01),
-        "In_house_freq", 0.05)
-    data4 = selectbig(data3, "VAF", 29)
-    data5 = selectbig(data4, "CADD", threshold)
-    return data5
-
-
-def tsv_filtered_by_revel(df_input, case_id, pwd, filename, thresh):
-    ## df_imput 是读出来的dropbox tsv,根据revel注释的vcf文件，生成{case_id}_revel_filter_{REVEL_Thresh}.tsv，也就是可以读取成df的文件，并且输出df_input中符合revel要求的部分
-    dir = f'{pwd}/{filename}/dropbox2vcf_revel'
-    if f'{case_id}_revel_filter_{thresh}.tsv' not in os.listdir(dir):
-        cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && filter_vep -i {dir}/{case_id}.vcf --filter "REVEL > {thresh} or not REVEL" -o {dir}/{case_id}_revel_filter_{thresh}.tsv --force_overwrite && bash {dir}/delet2df.sh'
-        os.system(cmd)
-    vcf_revel_tsv = pd.read_csv(f'{dir}/{case_id}_revel_filter_{thresh}.tsv', sep='\t')
-    vcf_revel_tsv['variant_list'] = vcf_revel_tsv['Location'].map(str) + vcf_revel_tsv['Allele']
-    for i in range(len(df_input)):
-        if df_input.loc[i, 'ALT'] == '-':
-            if len(df_input.loc[i, 'REF']) == 1:
-                pos = str(df_input.loc[i, 'POS'])
-            else:
-                pos = str(df_input.loc[i, 'POS']) + '-' + str(int(df_input.loc[i, 'POS']) + len(df_input.loc[i, 'REF']) - 1)
-        else:
-            if df_input.loc[i, 'REF'] == '-':
-                pos = str(int(df_input.loc[i, 'POS']) - 1) + '-' + str(df_input.loc[i, 'POS'])
-            else:
-                pos = str(df_input.loc[i, 'POS'])
-        df_input.loc[i, 'intersect_revel_list'] = str(df_input.loc[i, 'CHR']) + ':' + pos + str(df_input.loc[i, 'ALT'])
-    df_result = df_input[df_input['intersect_revel_list'].isin(vcf_revel_tsv['variant_list'])]
-    return df_result
-
-
-def getvcf_from_dropbox_tsv(pwd,filename,case_id, dir, outputfilename):
-    df = pd.read_csv(dir, sep="\t")  ##dropbox的tsv
-    dfx = df
-    for i in range(len(df)):
-        ##补充indel的REF和ALT
-        if df.at[i, 'ALT'] == '-':  ##deletion
-            ##print(i, 'ALT', df.at[i, 'ALT'])
-            pos = int(df.at[i, 'POS'])
-            chr = df.at[i, 'CHR']
-            cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
-            result = subprocess.getoutput(cmd)
-            dfx.at[i, 'ALT'] = result.split('\n')[1]
-            dfx.at[i, 'REF'] = result.split('\n')[1] + df.at[i, 'REF']
-            dfx.at[i, 'POS'] = pos - 1
-        else:
-            if df.at[i, 'REF'] == '-':  ## insertion
-                ##print(i, 'REF', df.at[i, 'REF'])
-                pos = int(df.at[i, 'POS'])
-                chr = df.at[i, 'CHR']
-                cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && samtools faidx ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa {chr}:{pos - 1}-{pos - 1}'
-                result = subprocess.getoutput(cmd)
-                dfx.at[i, 'REF'] = result.split('\n')[1]
-                dfx.at[i, 'ALT'] = result.split('\n')[1] + df.at[i, 'ALT']
-                dfx.at[i, 'POS'] = pos - 1
-
-    for j in range(len(dfx)):
-        if str(dfx.at[j, 'FILTER']) != '-':
-            continue
-            ## 只把-换成.
-        dfx.at[j, 'FILTER'] = '.'
-
-    QUAL = pd.DataFrame({'QUAL': pd.Series([100 for k in range(len(dfx))])})
-    INFO = pd.DataFrame({'INFO': pd.Series(['.' for k in range(len(dfx))])})
-    ## 假设一些无关紧要的格式信息，完成vcf必须的8列
-    # df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO, dfx['FORMAT']], axis=1)
-    # df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT']
-    df2 = pd.concat([dfx[['CHR', 'POS', 'Rs_ID', 'REF', 'ALT']], QUAL, dfx['FILTER'], INFO], axis=1)
-    df2.columns = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']
-    if f'{outputfilename}' not in os.listdir(f'{pwd}/{filename}'):
-        os.system(f'mkdir {pwd}/{filename}/{outputfilename}')
-    df2.to_csv(f"{pwd}/{filename}/{outputfilename}/{case_id}.txt", sep="\t",
-               index=False)  ##转化成vcf信息txt,存到对应数据版本file下
-    vcfdir = f"{pwd}/{filename}/{outputfilename}"
-    command = f"zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && awk -f {pwd}/script.awk {vcfdir}/{case_id}.txt | bcftools view -o {vcfdir}/{case_id}.vcf"
-    ## awk加一些vcf的表头信息，再bcftools转化完成vcf
-    print(command)
-    os.system(command)
-
-def dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id):
-    ##可以从old_pan来，也可以从manual来
-
-    filedir = 'no Filtered TSV anywhere'
-    source_mode = 'no Filtered TSV anywhere'
-    if get_case_id_file(case_id,'manual')!=0:
-        filedir = get_case_id_file(case_id,'manual')
-        source_mode = 'manual_single_V_1_1'
-    else:
-        print(f'no manual tsv file for {case_id}')
-        if get_case_id_file(case_id, 'sporadic') != 0:
-            filedir = get_case_id_file(case_id, 'sporadic')
-            source_mode = 'sporadic_old'
-        else:
-            if get_case_id_file(case_id, 'trio') != 0:
-                filedir = get_case_id_file(case_id, 'trio')
-                source_mode = 'trio_old'
-            else:
-                print(f'no old tsv file for {case_id}')
-    return filedir,source_mode
-
-def dir_of_Filtered_VCF_MUltiple_source(pwd,filename):
-    ##可以从old_list_vcf.gz来，也可以从manual来
-    if 'vcf.gz' in os.listdir(f'{pwd}/{filename}/manually_downloaded_vcf'):
-        os.system('gzip -d *vcf.gz*')
-
-
-
-def generatevcf_Filtered_TSV_intersect_Filtered_VCF(df,pwd,filename,case_id):
-    transform_log = pd.DataFrame(columns=['case_id','source_mode','tsv_file_address','source_vcf_address','intersect'])
-    for k in range(len(df)):
-        filedir,source_mode = dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id)
-        getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'multi_flt_tsv2vcf_no_info')
-        ##合成好了TSV对应的vcf，存在{pwd}/{}/，multi就是tsv来源包括manual，并且manual优先
-        transform_log.loc[k,'case_id'] = case_id
-        transform_log.loc[k, 'source_mode'] = source_mode
-        transform_log.loc[k, 'file_address'] = filedir
-        ##存在log表格文件中
-        ##Filtered VCF 地址 获取
-
-
-
-        ##取与Filtered VCF产生的交集
-        if 'multi_flt_tsv2vcf' not in os.listdir(f'{pwd}/{filename}'):
-            os.system('mkdir multi_flt_tsv2vcf')
-        manual_vcf_file = get_case_id_file(case_id=case_id, mode ='manual', filetype='vcf')
-        cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate bcftools && bcftools isec -c none -p dir -n=2 -w1 {pwd}/{filename}/multi_flt_tsv2vcf_no_info/{case_id}.vcf {manual_vcf_file} > {pwd}/{filename}/multi_flt_tsv2vcf/{case_id}.vcf'
-        try:
-            os.system(cmd)
-        except Exception as e:
-            print(e)
-        ## 对于没有手动下载VCF的患者，还没有解决。
-
-def genertatevcf_zs_diag_dropbox_tsv(df,pwd, filename, refresh=False):
-    ##df = df[2:].reset_index(drop=True)
-    print(f"{len(df)}")
-    for i in tqdm(range(len(df))):
-        case_id = df.loc[i, 'Blood ID']
-        filedir = dir_of_Filtered_TSV_MUltiple_source(pwd,filename,case_id)
-        if filedir == 'no Filtered TSV anywhere':
-            continue
-        if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf'):
-            getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'dropbox2vcf')
-            ##pwd,case_id, dir, filename
-        else:
-            if refresh:
-                getvcf_from_dropbox_tsv(pwd,filename,case_id, filedir, 'dropbox2vcf')
-        print('vcf done')
-        if f'{case_id}.vcf' not in os.listdir(f'{pwd}/{filename}/dropbox2vcf_revel'):
-            vcf_revel(pwd,f'{filename}/dropbox2vcf',
-                      f'{filename}/dropbox2vcf_revel', case_id=case_id)
-        else:
-            if refresh:
-                vcf_revel(pwd,f'{filename}/dropbox2vcf',
-                          f'{filename}/dropbox2vcf_revel', case_id=case_id)
-        print('revel done')
-
-
-def vcf_revel(pwd,inputdir, outputdir, case_id):
-    ## 使用前，先设置文件夹读写权限"chmod a+rwx ./output/*" "chmod a+rwx ./input/*"
-    cmd_pre = f'chmod a+rwx {pwd}/{inputdir}/* && chmod a+rwx {pwd}/{outputdir}/*'
-    os.system(cmd_pre)
-    print("right done")
-    cmd = f'zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate vep && Vep -i {pwd}/{inputdir}/{case_id}.vcf --fork 4 -o {pwd}/{outputdir}/{case_id}.vcf --assembly GRCh37 --cache --dir ~/Software/ensembl-vep --offline --fasta ~/Software/ensembl-vep/Homo_sapiens.GRCh37.dna.primary_assembly.fa --plugin REVEL,~/Software/ensembl-vep/revel/new_tabbed_revel.tsv.gz --force_overwrite'
-    os.system(cmd)
-
-
-
-import yaml
-def getyml_for_certain_ingeritance(case_id_file, hpo_id_input, dir, outputdir, inheridict, hpo):
-    with open(f'./yml/test-analysis-exome.yml', 'r') as f:
-        config = yaml.safe_load(f)
-        config['analysis']['vcf'] = f'{dir}/vcf/{case_id_file}.vcf'
-        config['analysis']['hpoIds'] = hpo_id_input  # add the command as a list for the correct yaml
-        #config['outputOptions']['outputFormats'] = ['TSV_GENE']
-        # config['outputOptions']['outputFormats'] = ['HTML','TSV_GENE','TSV_VARIANT']
-        config['outputOptions']['outputPrefix'] = f'{dir}/{outputdir}/{case_id_file}'
-        config['analysis']['inheritanceModes'] = inheridict
-        print(config['analysis']['hpoIds'])
-        print(config['analysis']['inheritanceModes'])
-    with open(f'{dir}/yml/{case_id_file}_{hpo}.yml', "a") as f:  # open the file in append mode
-        f.truncate(0)
-        yaml.dump(config, f)  ##default_flow_style=Faulse
-
-def getyml_for_1310(sequence_id,case_id, hpo_id_input, dir, outputdir, inheridict, hpo, pathogenic = ['REVEL', 'MVP']):
-    with open(f'./yml/1310-test-analysis-exome.yml', 'r') as f:
-        config = yaml.safe_load(f)
-        config['analysis']['vcf'] = f'{dir}/vcf/{sequence_id}.vcf'
-        config['analysis']['hpoIds'] = hpo_id_input  # add the command as a list for the correct yaml
-        config['analysis']['pathogenicitySources'] = pathogenic
-        #config['outputOptions']['outputFormats'] = ['TSV_GENE']
-        # config['outputOptions']['outputFormats'] = ['HTML','TSV_GENE','TSV_VARIANT']
-        config['outputOptions']['outputPrefix'] = f'{dir}/{outputdir}/1310-{case_id}'
-        config['inheritanceModes'] = inheridict
-        print(config['analysis']['hpoIds'])
-        print(config['analysis']['inheritanceModes'])
-    with open(f'{dir}/yml/1310-{case_id}_{hpo}.yml', "a") as f:  # open the file in append mode
-        f.truncate(0)
-        yaml.dump(config, f)  ##default_flow_style=Faulse
-
-def generateyml_zs_diag_zs_gVCF(df,pwd,filename,hpo,refresh=False):
-    #df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    ##df = df[36:37].reset_index(drop=True)
-    sequence_ids = df['sequence ID']
-    print(f"{len(df)}")
-    dir_scoliosis_gVCF_from_zs = f"{pwd}/{filename}"
-    if 'vcf' not in os.listdir(dir_scoliosis_gVCF_from_zs):
-        os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/vcf')
-    sequence_id_file_dict = os.listdir(f'{dir_scoliosis_gVCF_from_zs}/vcf/')
-    ##print(sequence_id_file_dict)
-    m = 0
-    n = 0
-    for i in range(len(df)):
-        sequence_id = sequence_ids[i]
-        sequence_id_file = f'{sequence_id}.vcf'
-        case_id = df.loc[i,'Blood ID']
-        #Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
-        if sequence_id_file not in sequence_id_file_dict:
-            print(f"{sequence_id_file} not in {filename}")
-            n = n + 1
-            ##去搞vcf吧
-            continue
-        else:
-            print("ok")
-            if df.loc[i, hpo][0] == '[':
-                hpo_id = df.loc[i, hpo][2:-2]
-                hpo_id_input = [str(k) for k in hpo_id.split("', '")]
-            else:
-                hpo_id = df.loc[i, hpo]
-                hpo_id_input = [k for k in hpo_id.split(";")]
-            inheri = (str(df.loc[i, 'inheritance'])).split(',')  ##存在输入了多种mode的可能
-            inheridict = {}
-            for k in inheri:
-                j = k.split(':')
-                inheridict[f'{j[0]}'] = float(j[1])
-            ##inheridict = [k for k in (df.loc[i, 'inheritance']).split(";")]
-            print(inheridict)
-            if hpo!='hpo_id':
-                outputdir = f'{hpo}_Exomiseroutput'
-                if outputdir not in os.listdir(dir_scoliosis_gVCF_from_zs):
-                    os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/{outputdir}')
-                if (f'{sequence_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
-                    getyml_for_certain_ingeritance(sequence_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, outputdir, inheridict, hpo)
-                if f'{hpo}_Exomiseroutput' not in os.listdir(dir_scoliosis_gVCF_from_zs):
-                    os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/{hpo}_Exomiseroutput')
-                if (case_id not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/{hpo}_Exomiseroutput'))) or refresh:
-                    command = f'cd ~/Downloads/exomiser-cli-12.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-12.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/{sequence_id}_{hpo}.yml'
-                    print(command)
-                    os.system(command)
-            else:
-                if (f'{sequence_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
-                    getyml_for_certain_ingeritance(sequence_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, 'Exomiseroutput',
-                                                   inheridict, hpo)
-                if (case_id not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/Exomiseroutput'))) or refresh:
-                    command = f'cd ~/Downloads/exomiser-cli-12.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-12.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/{sequence_id}_{hpo}.yml'
-                    print(command)
-                    os.system(command)
-            print(f'{case_id}, NO.{i}, exomiser done')
-            m = m + 1
-            print(f'{m} case finish exomiser')
-            print(f'{n} files were not in {filename}')
-
-## pahtogenicity version合并
-def generateyml1310_zs_diag_zs_gVCF(df, pwd, filename, hpo, refresh=False):
-    sequence_ids = df['sequence ID']
-    print(f"{len(df)}")
-    dir_scoliosis_gVCF_from_zs = f"{pwd}/{filename}"
-    if 'vcf' not in os.listdir(dir_scoliosis_gVCF_from_zs):
-        os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/vcf')
-    sequence_id_file_dict = os.listdir(f'{dir_scoliosis_gVCF_from_zs}/vcf/')
-    ##print(sequence_id_file_dict)
-    m = 0
-    n = 0
-    for i in range(len(df)):
-        sequence_id = sequence_ids[i]
-        sequence_id_file = f'{sequence_id}.vcf'
-        case_id = df.loc[i,'Blood ID']
-        #Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
-        if sequence_id_file not in sequence_id_file_dict:
-            print(f"{sequence_id_file} not in {filename}")
-            n = n + 1
-            ##去搞vcf吧
-            continue
-        else:
-            print("vcf ok")
-            if df.loc[i, hpo][0] == '[':
-                hpo_id = df.loc[i, hpo][2:-2]
-                hpo_id_input = [str(k) for k in hpo_id.split("', '")]
-            else:
-                hpo_id = df.loc[i, hpo]
-                hpo_id_input = [k for k in hpo_id.split(";")]
-            inheri = (str(df.loc[i, 'inheritance'])).split(',')  ##存在输入了多种mode的可能
-            inheridict = {}
-            for k in inheri:
-                j = k.split(':')
-                inheridict[f'{j[0]}'] = float(j[1])
-            ##inheridict = [k for k in (df.loc[i, 'inheritance']).split(";")]
-            print(inheridict)
-            if hpo!='hpo_id':
-                outputdir = f'{hpo}_Exomiser1310'
-                if outputdir not in os.listdir(dir_scoliosis_gVCF_from_zs):
-                    os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/{outputdir}')
-                if (f'1310-{case_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
-                    getyml_for_1310(sequence_id,case_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, outputdir, inheridict, hpo)
-                if (f'1310-{case_id}' not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/{hpo}_Exomiser1310'))) or refresh:
-                    command = f'cd ~/Downloads/exomiser-cli-13.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-13.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/1310-{case_id}_{hpo}.yml'
-                    print(command)
-                    os.system(command)
-            else:
-                if (f'1310-{case_id}_{hpo}.yml' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}/yml/')) or refresh:
-                    getyml_for_1310(sequence_id,case_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, 'Exomiser1310',
-                                                   inheridict, hpo)
-                if (f'1310-{case_id}' not in " ".join(os.listdir(f'{dir_scoliosis_gVCF_from_zs}/Exomiser1310'))) or refresh:
-                    command = f'cd ~/Downloads/exomiser-cli-13.1.0 && java -Xms2g -Xmx4g -jar exomiser-cli-13.1.0.jar -analysis {dir_scoliosis_gVCF_from_zs}/yml/1310-{case_id}_{hpo}.yml'
-                    print(command)
-                    os.system(command)
-            print(f'{case_id}, NO.{i}, exomiser 13.1.0 done')
-            m = m + 1
-            print(f'{m} case finish exomiser 13.1.0')
-            print(f'{n} files were not in {filename}')
-
-
-def get_phenopaket(sequence_id, hpo_id_input, dir, hpo):
-    with open('~/Downloads/LIRICAL-1.3.4/example.json', 'rb') as f:  # 使用只读模型，并定义名称为f
-        params = json.load(f)  # 加载json文件
-        pheno_dict = []
-        for i in range(len(hpo_id_input)):
-            pheno_dict_id = dict()
-            pheno_dict_id_2 = dict()
-            pheno_dict_id['id'] = hpo_id_input[i]
-            pheno_dict_id_2['type'] = pheno_dict_id
-            pheno_dict.append(dict(pheno_dict_id_2))
-        params["phenotypicFeatures"] = pheno_dict
-        params["htsFiles"][0]["uri"] = f'{dir}vcf/{sequence_id}.vcf'
-        ##print("params", params)  # 打印
-        f.close()  # 关闭json读模式
-    with open(f'{dir}phenopacket/{sequence_id}_{hpo}.json', 'w') as r:
-        json.dump(params, r)
-        # 关闭json写模式
-        r.close()
-
-
-def generate_phenopaket_zs_diag_zs_gVCF(df,pwd,filename,hpo,refresh=False):
-    #df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    ##df = df[36:37].reset_index(drop=True)
-    sequence_ids = df['sequence ID']
-    print(f"{len(df)}")
-    dir_scoliosis_gVCF_from_zs = f"{pwd}/{filename}/"
-    if 'vcf' not in os.listdir(f'{dir_scoliosis_gVCF_from_zs}'):
-        os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}vcf')
-    sequence_id_file_dict = os.listdir(f'{dir_scoliosis_gVCF_from_zs}vcf/')
-    ##print(sequence_id_file_dict)
-    m = 0
-    n = 0
-    for i in range(len(df)):
-        sequence_id = sequence_ids[i]
-        sequence_id_file = f'{sequence_id}.vcf'
-        case_id = sequence_id.split('-')[0]
-        if sequence_id_file not in sequence_id_file_dict:
-            print(f"{sequence_id_file} not in {filename}")
-            n = n + 1
-            ##需要搞到vcf
-            continue
-        else:
-            print("ok")
-            if df.loc[i, hpo][0] == '[':
-                hpo_id = df.loc[i, hpo][2:-2]
-                hpo_id_input = [str(k) for k in hpo_id.split("', '")]
-            else:
-                hpo_id = df.loc[i, hpo]
-                hpo_id_input = [k for k in hpo_id.split(";")]
-            if (f'{sequence_id}_{hpo}.json' not in os.listdir()) or refresh:
-                get_phenopaket(sequence_id, hpo_id_input, dir_scoliosis_gVCF_from_zs, hpo)
-                print(f'{case_id}, NO.{i}, phenopaket done')
-            m = m + 1
-            if hpo =='hpo_id':
-                if (f'{sequence_id}.tsv' not in os.listdir(f'{pwd}/{filename}/LIRICALoutput/')) or refresh:
-                    command = f'cd {pwd}/{filename}/LIRICALoutput && java -jar LIRICAL.jar phenopacket -p {dir_scoliosis_gVCF_from_zs}phenopacket/{sequence_id}_{hpo}.json -d ~/Downloads/LIRICAL-1.3.4/data -e ~/Downloads/exomiser-cli-12.1.0/data/1909_hg19 -x {sequence_id} --tsv'
-                    print(command)
-                    os.system(command)
-                    ##跑太慢了，所以hpo_id的结果还是用原来的
-                    ##java -jar LIRICAL.jar phenopacket -p ../phenopacket/CSS16261200102_test.json -d /Users/liyaqi/Downloads/LIRICAL-1.3.4/data -e /Users/liyaqi/Downloads/exomiser-cli-12.1.0/data/1909_hg19 -x test --tsv
-
-            else:
-                if f'{hpo}_LIRICALoutput' not in os.listdir(f'{pwd}/{filename}'):
-                    os.system(f'mkdir {pwd}/{filename}/{hpo}_LIRICALoutput && cp {pwd}/{filename}/LIRICALoutput/LIRICAL.jar {pwd}/{filename}/{hpo}_LIRICALoutput/LIRICAL.jar && cp {pwd}/{filename}/LIRICALoutput/outputtodf.sh {pwd}/{filename}/{hpo}_LIRICALoutput/outputtodf.sh')
-                if (f'{sequence_id}.tsv'not in os.listdir(f'{pwd}/{filename}/{hpo}_LIRICALoutput/')) or refresh:
-                    command = f'cd {pwd}/{filename}/{hpo}_LIRICALoutput && java -jar LIRICAL.jar phenopacket -p {dir_scoliosis_gVCF_from_zs}phenopacket/{sequence_id}_{hpo}.json -d ~/Downloads/LIRICAL-1.3.4/data -e ~/Downloads/exomiser-cli-12.1.0/data/1909_hg19 -x {sequence_id} --tsv'
-                    print(command)
-                    os.system(command)
-
-        print(f'{m} case finish LIRICAL')
-    if hpo == 'hpo_id':
-        os.system(f'bash {pwd}/{filename}/LIRICALoutput/outputtodf.sh')
-    else:
-        os.system(f'bash {pwd}/{filename}/{hpo}_LIRICALoutput/outputtodf.sh')
-
-
-def generateped(df,pwd,filename,refresh,df_sex):
-    df_sex = df_sex.rename(index=df_sex['Blood ID'])
-    df_sex = dict(df_sex['Sex'])
-    for i in range(len(df)):
-        case_id = df.loc[i, 'Blood ID']
-        ##做ped
-        if '{case_id}.tsv' not in os.listdir(f'{pwd}/{filename}/ped/') or refresh:
-            ped_df = (pd.DataFrame(['FAM1', case_id, 'FATHER', 'MOTHER', df_sex.get(case_id), 2]).T)
-            ped_df.to_csv(
-                f'{pwd}/{filename}/ped/{case_id}.tsv',
-                sep='\t', index=False, header=False)
-            cmd = f'mv {pwd}/{filename}/ped/{case_id}.tsv {pwd}/{filename}/ped/{case_id}.ped'
-            os.system(cmd)
-            ##做好了ped for phen-gen
 
 def get_HANRD(df,pwd,filename,hpo,refresh=False,refresh_seperate_file=False):
     #print('start')
@@ -1587,13 +560,6 @@ def get_PhenoRank(df,pwd,filename,hpo,refresh=False):
             print('phenorank exist')
 
 def GADO(df,pwd,filename,hpo,refresh=False):
-    # df = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', 'Sheet1')
-    # df = df[:1].reset_index(drop=True)
-    # if f'totalhpo_{hpo}.txt' in os.listdir(f'{pwd}/{filename}/hpotxt/'):
-    #     previous_input_hpo = pd.read_csv(f'./{filename}/hpotxt/totalhpo_{hpo}.txt',sep='\t')
-    ##把hpotxt存在txt里
-    # else:
-    #     previous_input_hpo =pd.DataFrame()
     hpotxt = {}
     for i in range(len(df)):
         case_id = df['Blood ID'][i]
@@ -1665,6 +631,30 @@ def phen2gene_rank(df, pwd, filename, hpo='hpo_id',profile='candidategene',refre
                 os.system(command_phen2gene_intersect)
                 print('run phen2gene')
         ## 有基因列表
+
+def Phenogenius_rank(df,pwd,filename,hpo,refresh):
+    print('----------Phenogenius running-------------\n')
+    for i in range(len(df)):
+        case_id = df['Blood ID'][i]
+        outputdir = f'{hpo}_PhenoGenius_output'
+        if outputdir not in os.listdir(f'{pwd}/{filename}'):
+            os.system(f'mkdir {pwd}/{filename}/{outputdir}')
+        if f'{case_id}.tsv' not in os.listdir(f'{pwd}/{filename}/{outputdir}') or refresh:
+            if df.loc[i, hpo][0] == '[':
+                hpo_id = df.loc[i, hpo][2:-2]
+                hpo_id_input = [k for k in hpo_id.split("', '")]
+            else:
+                hpo_id = df.loc[i, hpo]
+                hpo_id_input = [k for k in hpo_id.split(";")]
+            hpo_id_list_str =''
+            for hpo_id_str in hpo_id_input:
+                hpo_id_list_str = hpo_id_list_str + hpo_id_str+','
+            hpo_id_list_str = hpo_id_list_str[:-1]
+            cmd = f"/bin/zsh -c 'source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate PhenoGenius && cd  /Users/liyaqi/Software/PhenoGenius && python phenogenius_cli.py --hpo_list {hpo_id_list_str} --result_file {pwd}/{filename}/{outputdir}/{case_id}.tsv'"
+            print(cmd)
+            os.system(cmd)
+        print(f"No. {i} case id {case_id}: PhenoGenius done")
+    print('----------Phenogenius has finished-------------\n')
 
 
 def hpotxt_phenolyzer(df,pwd,filename,hpo,refresh_hpo_txt):
@@ -1846,7 +836,7 @@ def phenoapt_rank(df, pwd, filename, hpo, refresh=False, all_hpo_plus_weight=Fal
 
 
 def getyml(case_id_file, hpo_id_input, dir):
-    with open(f'./yml/test-analysis-exome.yml', 'r') as f:
+    with open(f'../yml/test-analysis-exome.yml', 'r') as f:
         config = yaml.safe_load(f)
         config['analysis']['vcf'] = f'{dir}*vcf/{case_id_file}.vcf'
         config['analysis']['hpoIds'] = hpo_id_input  # add the command as a list for the correct yaml
@@ -1939,11 +929,11 @@ def collect_variants(pwd,df, filename='scoliosis_gVCF_from_zs_updating'):
         ensemblid = df.loc[i, 'Ensembl Gene ID']
         print(ensemblid)
         case_id = df.loc[i, 'Blood ID']
-        if get_case_id_file(case_id, 'sporadic') != 0:
-            filedir = get_case_id_file(case_id, 'sporadic')
+        if get_case_id_file(case_id, 'sporadic',pwd,filename,filetype='tsv') != 0:
+            filedir = get_case_id_file(case_id, 'sporadic',pwd,filename,filetype='tsv')
         else:
-            if get_case_id_file(case_id, 'trio') != 0:
-                filedir = get_case_id_file(case_id, 'trio')
+            if get_case_id_file(case_id, 'trio',pwd,filename,filetype='tsv') != 0:
+                filedir = get_case_id_file(case_id, 'trio',pwd,filename,filetype='tsv')
             else:
                 print('no tsv file')
                 continue
@@ -2273,37 +1263,3 @@ def searchTF_IDF_for_R(df,tools,pwd,filename):
         except Exception as e:
             print(e)
     pus_hpo_tf_idf.to_csv('pus_TF_IDF.tsv',sep='\t',index=False)
-
-# def TF_IDF_distribution_R(generate_distribution_file,organ_df):
-#     if generate_distribution_file():
-#         df = pd.read_csv('TF_IDF_weight_organ_2.tsv',sep='\t')
-#         m=0
-#         distribution=pd.DataFrame(columns=['hpo','organ_system','TF_IDF'])
-#         for k in tqdm(range(len(df))):
-#             if str(df.loc[k,'hpo_id_organ_system_number'])!='nan':
-#                 if int(df.loc[k,'hpo_id_organ_system_number'])!=0:
-#                     system = df.loc[k, 'hpo_id_organ_system'].split('+')
-#                     TF_IDF= df.loc[k, 'intrinsic_weight']
-#                     hpo = df.loc[k,'hpo_id']
-#                     for n in range(len(system)):
-#                         m=m+n
-#                         distribution.loc[m,'organ_system']=system[n]
-#                         distribution.loc[m,'TF_IDF'] = TF_IDF
-#                         distribution.loc[m, 'hpo'] = hpo
-#                     m=m+1
-#                     print(m)
-#         distribution.to_csv('TF_IDF_distribution_for_R.tsv',sep='\t',index=False)
-#     for k in range(len(organ_df)):
-#         hpo=organ_df.loc[k,'Term']
-#         organ=organ_df.loc[k,'Name']
-#         script = f"tf_idf_organ$organ_system = factor(tf_idf_organ$organ_system,levels = c({level}),labels = c({label}))"
-#         level
-#         label
-#
-#
-#
-#     # df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', ' organ_system')
-#     # df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-#     # for i in df['Symbol']:
-#     #     print(searchHGNCid(i))
-

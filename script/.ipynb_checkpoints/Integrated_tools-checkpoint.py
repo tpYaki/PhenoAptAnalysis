@@ -239,8 +239,7 @@ def generate_phenopaket_zs_diag_zs_gVCF(df,vcf_adress_dict,pwd,filename,hpo,mode
                 os.system(command)
 
             print(f'{m} case finish LIRICAL')
-            print(f'cd {pwd}/{filename}/{outputdir} && bash outputtodf.sh')
-            os.system(f'cd {pwd}/{filename}/{outputdir} && bash outputtodf.sh')
+            os.system(f'bash {pwd}/{filename}/{outputdir}/outputtodf.sh')
 
 
 def generateped(df,pwd,filename,refresh,df_sex):

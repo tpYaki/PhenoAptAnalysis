@@ -1,6 +1,4 @@
 import xlrd
-xlrd.xlsx.ensure_elementtree_imported(False, None)
-xlrd.xlsx.Element_has_iter = True
 import pandas as pd
 import os
 # 读取诊断表格
