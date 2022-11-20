@@ -80,24 +80,25 @@ def get_phenomizer_rank(correct_gene, searchlist):
         rp = (rank+1)/len(searchlist)
     return rank, rr , rp
 
-def load_txt_list(filedir):
-    with open(filedir) as f:
-        list = (f.read().replace('\n','')).split(',')
-    return list
+def load_pdtxt_list(filedir):
+    txt_df = pd.read_csv(filedir,sep='\t',header=None)
+    list = (txt_df[0]).to_list()
+    return set(list)
+
 
 def process_rank_result_table(tool,result_mode,result_list,case_id,i,pathogenic_gene_dict,pwd,filename,intersect,REVEL_thresh,CADD_thresh,part_table,part_rr_table,part_rp_table):
     txt_dir_dict = {'Symbol':'candidategene','Ensembl Gene ID':'candidategene_ensemblid','HGNC':'candidategene_hgncid'}
-    tsv_candidate_gene_list = load_txt_list(f'{pwd}/{filename}/{txt_dir_dict[result_mode]}/{case_id}.txt')
+    tsv_candidate_gene_list = load_pdtxt_list(f'{pwd}/{filename}/{txt_dir_dict[result_mode]}/{case_id}.txt')
     Filter_txt_dir_dict = {'Symbol': '', 'Ensembl Gene ID': '_ensemblid','HGNC': '_hgncid'}
     if len(REVEL_thresh) != 0:
         tsv_candidate_gene_revel_dict = {}
         for thresh in REVEL_thresh:
-            tsv_candidate_gene_revel_dict[thresh] = load_txt_list(f'{pwd}/{filename}/revel_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
+            tsv_candidate_gene_revel_dict[thresh] = load_pdtxt_list(f'{pwd}/{filename}/revel_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
 
     if len(CADD_thresh) != 0:
         tsv_candidate_gene_cadd_dict = {}
         for thresh in CADD_thresh:
-            tsv_candidate_gene_cadd_dict[thresh] = load_txt_list(f'{pwd}/{filename}/cadd_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
+            tsv_candidate_gene_cadd_dict[thresh] = load_pdtxt_list(f'{pwd}/{filename}/cadd_{thresh}{Filter_txt_dir_dict[result_mode]}/{case_id}.txt')
 
     if tool == 'phenomizer':
         part_table.loc[i, f'{tool}_rank'], part_rr_table.loc[i, f'{tool}_rank'], part_rp_table.loc[
@@ -229,7 +230,7 @@ def statistic_to_table(df,pwd,filename,hpo,tools,intersect,REVEL_thresh,CADD_thr
                      'dir': {'PhenoGenius': f'{hpo}_PhenoGenius_output/{case_id}.tsv',
                              'phrank': f'phrankoutput/{case_id}_{hpo}_nogenelist_phrank_rank.tsv',
                              'phenolyzer': f'phenolyzeroutput/{case_id}_{hpo}.final_gene_list',
-                             'GADO': f'GADOoutput/{case_id}.txt','phenoapt':f'phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',
+                             'GADO': f'{hpo}_GADOoutput/{case_id}.txt','phenoapt':f'phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv',
                              'HANRD':f'HANRDoutput/output/{case_id}_{hpo}.tsv',
                              'PhenoRank':f'PhenoRankoutput/{case_id}_{hpo}.tsv',
                              'phenomizer':f'phenomizeroutput/{hpo}/{case_id}.tsv'},
@@ -449,7 +450,7 @@ def containtype(biao, type):
     return data_mut
     # 包含字符串type=“”的rows，Na的单元格自动去掉
 
-def get_HANRD(df,pwd,filename,hpo,refresh=False,refresh_seperate_file=False):
+def get_HANRD_backup(df,pwd,filename,hpo,refresh=False,refresh_seperate_file=False):
     #print('start')
     HANRD_input=pd.DataFrame(columns=['ID','HPO','Orphanet ID (Diagnosed Disorder)','HGNC (Casual Gene)'])
     for i in range(len(df)):
@@ -504,6 +505,47 @@ def get_HANRD(df,pwd,filename,hpo,refresh=False,refresh_seperate_file=False):
         else:
             print(f'{case_id} result exist')
 
+def get_HANRD(df,pwd,filename,hpo,refresh=False,refresh_seperate_file=False):
+    #print('start')
+    HANRD_log = pd.DataFrame(columns=['ID','HPO','bug'])
+    HANRD_input=pd.DataFrame(columns=['ID','HPO','Orphanet ID (Diagnosed Disorder)','HGNC (Casual Gene)'])
+    for i in range(len(df)):
+        case_id = df.loc[i, 'Blood ID']
+        if df.loc[i, hpo][0] == '[':
+            hpo_id = df.loc[i, hpo][2:-2]
+            hpo_id_input = [str(k) for k in hpo_id.split("', '")]
+        else:
+            hpo_id = df.loc[i, hpo]
+            hpo_id_input = [k for k in hpo_id.split(";")]
+        #print(hpo_id_input)
+        HPO=''
+        for k in hpo_id_input:
+            HPO = HPO+str(k)+', '
+        print(HPO[:-2])
+        HANRD_input.loc[i,'HPO'] = HPO[:-2]
+        HANRD_input.loc[i,'ID'] = df.loc[i, 'Blood ID']
+        HANRD_input.loc[i,'HGNC (Casual Gene)'] = '-'
+        HANRD_input.loc[i,'Orphanet ID (Diagnosed Disorder)'] = '-'
+        HANRD_log.loc[i,'ID'] = df.loc[i, 'Blood ID']
+        HANRD_log.loc[i, 'HPO'] = HPO[:-2]
+        if 'HANRDoutput' not in os.listdir(f'{pwd}/{filename}'):
+            os.system('mkdir HANRDoutput')
+        if f'{case_id}_{hpo}.tsv' not in os.listdir(f'{pwd}/{filename}/HANRDoutput/output') or refresh:
+            HANRD_input.to_csv(f'{pwd}/{filename}/HANRDoutput/{case_id}_{hpo}.tsv', sep='\t',index=False)
+            print('new HANRD file ready')
+            try:
+                cmd = f'cd ~/Software/HANRD/gcas && java -Xmx8096M -jar gcas.jar {pwd}/{filename}/HANRDoutput/{case_id}_{hpo}.tsv'
+                print(cmd)
+                os.system(cmd)
+                print(f'{case_id} HANRD done')
+                os.system(f'mv {pwd}/{filename}/HANRDoutput/{case_id}_{hpo}_gene.out {pwd}/{filename}/HANRDoutput/output/{case_id}_{hpo}.tsv')
+                print(f'{case_id} result saved')
+            except Exception as e:
+                HANRD_log.loc[i,'bug'] = e
+        else:
+            print(f'{case_id} result exist')
+        HANRD_log.to_csv(f'{pwd}/{filename}/HANRDoutput/log.csv')
+
 def pubcasefinder(df,pwd,filename,hpo,refresh=False):
     ##日本时间晚上11点到凌晨五点之间
     if 'pubcasefinderoutput' not in os.listdir(f'{pwd}/{filename}'):
@@ -552,9 +594,9 @@ def get_PhenoRank(df,pwd,filename,hpo,refresh=False):
         if 'PhenoRankoutput' not in os.listdir(f'{pwd}/{filename}'):
             os.system(f'mkdir {pwd}/{filename}/PhenoRankoutput')
         if f'{case_id}_{hpo}.tsv' not in os.listdir(f'{pwd}/{filename}/PhenoRankoutput') or refresh:
-            cmd = f"cd ~/Software/PhenoRank && zsh && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate phenorank && python run_PhenoRank.py -o {pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv -p '{HPO[:-1]}' && exit"
-            appscript.app('Terminal').do_script(cmd)
-            time.sleep(15)
+            cmd = f'/bin/zsh -c "cd ~/Software/PhenoRank && source ~/opt/anaconda3/etc/profile.d/conda.sh && conda activate phenorank && python run_PhenoRank.py -o {pwd}/{filename}/PhenoRankoutput/{case_id}_{hpo}.tsv -p'+f"'{HPO[:-1]}'"+'"'
+            print(cmd)
+            os.system(cmd)
             print('new phenorank ok')
         else:
             print('phenorank exist')
@@ -680,9 +722,9 @@ def hpotxt_phenolyzer(df,pwd,filename,hpo,refresh_hpo_txt):
             print(f"{i}txt done")
 
 
-def phenolyzer(df,pwd,filename,hpo,refresh=False):
+def phenolyzer(df,pwd,filename,hpo,refresh=False,refresh_hpo_txt=False):
     ##需要新修改既往hpotxt for phenolyzer时打开refresh，单纯新增case不需要refresh
-    hpotxt_phenolyzer(df,pwd,filename,hpo,refresh)
+    hpotxt_phenolyzer(df,pwd,filename,hpo,refresh_hpo_txt)
     ##运行phenolyzer
     #df = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', 'Sheet1')
     # df = df[:1].reset_index(drop=True)
@@ -690,21 +732,11 @@ def phenolyzer(df,pwd,filename,hpo,refresh=False):
         os.system(f'mkdir {pwd}/{filename}/phenolyzeroutput')
     for i in tqdm(range(len(df))):
         case_id = df['Blood ID'][i]
-        if hpo !='hpo_id':
-            hpo_txt_dir = f'{pwd}/{filename}/hpotxt/{case_id}_{hpo}.txt'
-            if (f'{case_id}_{hpo}' not in ''.join(os.listdir(f'{pwd}/{filename}/phenolyzeroutput/'))) or refresh:
-                cmd_phenolyzer = f'cd ~/Software/phenolyzer && perl disease_annotation.pl {hpo_txt_dir} -file -prediction -phenotype -logistic -out {pwd}/{filename}/phenolyzeroutput/{case_id}_{hpo} -addon DB_DISGENET_GENE_DISEASE_SCORE,DB_GAD_GENE_DISEASE_SCORE -addon_weight 0.25 && exit'
-                print(cmd_phenolyzer)
-                appscript.app('Terminal').do_script(cmd_phenolyzer)
-                time.sleep(30)
-        else:
-            hpo_txt_dir = f'{pwd}/{filename}/hpotxt/{case_id}_{hpo}.txt'
-            ##如果有新case，还是用新产生的——hpo_id后缀的hpo.txt
-            if (f'{case_id}.' not in ''.join(os.listdir(f'{pwd}/{filename}/phenolyzeroutput/'))) or refresh:
-                cmd_phenolyzer = f'cd ~/Software/phenolyzer && perl disease_annotation.pl {hpo_txt_dir} -file -prediction -phenotype -logistic -out {pwd}/{filename}/phenolyzeroutput/{case_id} -addon DB_DISGENET_GENE_DISEASE_SCORE,DB_GAD_GENE_DISEASE_SCORE -addon_weight 0.25 && exit'
-                print(cmd_phenolyzer)
-                appscript.app('Terminal').do_script(cmd_phenolyzer)
-                time.sleep(30)
+        hpo_txt_dir = f'{pwd}/{filename}/hpotxt/{case_id}_{hpo}.txt'
+        if (f'{case_id}_{hpo}' not in ''.join(os.listdir(f'{pwd}/{filename}/phenolyzeroutput/'))) or refresh:
+            cmd_phenolyzer = f'/bin/zsh -c "cd ~/Software/phenolyzer && perl disease_annotation.pl {hpo_txt_dir} -file -prediction -phenotype -logistic -out {pwd}/{filename}/phenolyzeroutput/{case_id}_{hpo} -addon DB_DISGENET_GENE_DISEASE_SCORE,DB_GAD_GENE_DISEASE_SCORE -addon_weight 0.25"'
+            print(cmd_phenolyzer)
+            os.system(cmd_phenolyzer)
     print('phenolyzer ready')
     return True
 
@@ -772,7 +804,7 @@ def phenoapt_rank(df, pwd, filename, hpo, refresh=False, all_hpo_plus_weight=Fal
                     hpo_id = df.loc[i, hpo]
                     hpo_id_input = [k for k in hpo_id.split(";")]
                 weight_1 = [1 for k in range(len(hpo_id_input))]
-                client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')
+                client = PhenoApt(token='H0pVk00CX07VzkZbdnvHI$24XiU$u9q')##
                 pheno_result = (client.rank_gene(phenotype=hpo_id_input, weight=weight_1, n=5000)).rank_frame
                 pheno_result = pd.DataFrame(pheno_result)
                 pheno_result.to_csv(f'{pwd}/{filename}/phenoaptoutput/{case_id}_{hpo}_phenoapt_rank.tsv', sep='\t')
@@ -865,45 +897,58 @@ def Rscript_brief_benchmark(tools=[],intersect=True,REVEL_thresh=[],CADD_thresh=
     strategy_script = ""
     ##'data_set$strategy<-gsub("nursing 1st","nursing",data_set$strategy)'
     for tool in tools:
-        if tool in ['phenoapt','phrank', 'phenolyzer', 'GADO', 'phen2gene','PhenoRank','HANRD','phenomizer']:
+        if tool in ['phenoapt', 'phenomizer', 'phenolyzer', 'GADO', 'phen2gene', 'phrank', 'HANRD','PhenoGenius']:
             strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank$'" + "," + "'Pheno_only_tools',data_set$strategy)\n"
             if intersect:
-                strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_intersect_rank'" + "," + "'PUMCHpipeline',data_set$strategy)\n"
+                strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_intersect'" + "," + "'Pheno_only_Qual_Freq_Filter',data_set$strategy)\n"
                 if len(REVEL_thresh)!=0:
                     for thresh in REVEL_thresh:
-                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_REVEL_{thresh}'" + "," + f"'REVEL_{thresh}',data_set$strategy)\n"
+                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_revel_{thresh}'" + "," + f"'Pheno_only_REVEL_{thresh}',data_set$strategy)\n"
                 if len(CADD_thresh)!=0:
                     for thresh in CADD_thresh:
-                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_CADD_{thresh}'" + "," + f"'CADD_{thresh}',data_set$strategy)\n"
+                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_cadd_{thresh}'" + "," + f"'Pheno_only_CADD_{thresh}',data_set$strategy)\n"
         else:
             strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank$'" + "," + "'Integrated_tools',data_set$strategy)\n"
+            if intersect:
+                strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_intersect'" + "," + "'Integrated_Qual_Freq_Filter',data_set$strategy)\n"
+                if len(REVEL_thresh) != 0:
+                    for thresh in REVEL_thresh:
+                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_revel_{thresh}'" + "," + f"'Integrated_REVEL_{thresh}',data_set$strategy)\n"
+                if len(CADD_thresh) != 0:
+                    for thresh in CADD_thresh:
+                        strategy_script = strategy_script + "data_set$strategy<-gsub(" + f"'{tool}_rank_cadd_{thresh}'" + "," + f"'Integrated_CADD_{thresh}',data_set$strategy)\n"
 
     tool_script = ""
     ##针对hpo_id做benchmark的代码
     for tool in tools:
-        if tool in ['phenoapt', 'phrank', 'phenolyzer', 'GADO', 'phen2gene','PhenoRank','HANRD','phenomizer']:
-            tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank$'" + "," + f"'{tool}',data_set$variable)\n"
-            if intersect:
-                tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_intersect_rank'" + "," + f"'{tool}',data_set$variable)\n"
-                if len(REVEL_thresh) != 0:
-                    for thresh in REVEL_thresh:
-                        tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank_REVEL_{thresh}'" + "," + f"'{tool}',data_set$variable)\n"
-                if len(CADD_thresh) != 0:
-                    for thresh in CADD_thresh:
-                        tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank_CADD_{thresh}'" + "," + f"'{tool}',data_set$variable)\n"
-        else:
-            tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank$'" + "," + f"'{tool}',data_set$variable)\n"
+        tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank$'" + "," + f"'{tool}',data_set$variable)\n"
+        if intersect:
+            tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank_intersect'" + "," + f"'{tool}',data_set$variable)\n"
+            if len(REVEL_thresh) != 0:
+                for thresh in REVEL_thresh:
+                    tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank_revel_{thresh}'" + "," + f"'{tool}',data_set$variable)\n"
+            if len(CADD_thresh) != 0:
+                for thresh in CADD_thresh:
+                    tool_script = tool_script + "data_set$variable<-gsub(" + f"'{tool}_rank_cadd_{thresh}'" + "," + f"'{tool}',data_set$variable)\n"
 
     level = "'Pheno_only_tools'"
     if intersect:
-        level = level+", 'PUMCHpipeline'"
+        level = level+", 'Pheno_only_Qual_Freq_Filter'"
         if len(REVEL_thresh)!=0:
             for thresh in REVEL_thresh:
-                level = level + f", 'REVEL_{thresh}'"
+                level = level + f", 'Pheno_only_REVEL_{thresh}'"
         if len(CADD_thresh)!=0:
             for thresh in CADD_thresh:
-                level = level + f", 'CADD_{thresh}'"
+                level = level + f", 'Pheno_only_CADD_{thresh}'"
     level = level + ", 'Integrated_tools'"
+    if intersect:
+        level = level+", 'Integrated_Qual_Freq_Filter'"
+        if len(REVEL_thresh)!=0:
+            for thresh in REVEL_thresh:
+                level = level + f", 'Integrated_REVEL_{thresh}'"
+        if len(CADD_thresh)!=0:
+            for thresh in CADD_thresh:
+                level = level + f", 'Integrated_CADD_{thresh}'"
     strategy_script = strategy_script + f"data_set$strategy<-factor(data_set$strategy,levels=c({level}))"
 
     ## 输出所有出现过的分类名称，用来命名
@@ -912,16 +957,17 @@ def Rscript_brief_benchmark(tools=[],intersect=True,REVEL_thresh=[],CADD_thresh=
         count_class = count_class + ['not_in_filtered_tsv']
         if len(REVEL_thresh) != 0:
             for thresh in REVEL_thresh:
-                count_class = count_class + [f'filtered_by_REVEL_{thresh}']
+                count_class = count_class + [f'filtered_by_revel_{thresh}']
         if len(CADD_thresh) != 0:
             for thresh in CADD_thresh:
-                count_class = count_class + [f'filtered_by_CADD_{thresh}']
+                count_class = count_class + [f'filtered_by_cadd_{thresh}']
     class_names = 'rowname = c(' + "".join(",'" + k + "'" for k in count_class)[1:] + ')'
 
     print(f'copy this class name to R script:\n{class_names}\n\n{strategy_script}\n\n{tool_script}')
 
 
 def collect_variants(pwd,df, filename='scoliosis_gVCF_from_zs_updating'):
+    ##TODO: manual filtered TSV enter
     if 'collected_variants.tsv' in os.listdir(f'{pwd}/{filename}'):
         os.system(f'rm -f {pwd}/{filename}/collected_variants.tsv')
     for i in tqdm(range(len(df))):
@@ -969,7 +1015,7 @@ def readobo(df,hpo,df_organ,save):
     # Read the taxrank ontology
     groupnames = df_organ['Term']
     if f'{hpo}_organ_system' not in df.columns:
-        df[f'{hpo}_organ_system']= ""
+        df[f'{hpo}_organ_system'] = np.nan
         df[f'{hpo}_organ_system_number'] = np.nan
     for j in tqdm(range(len(df))):
         if str(df.loc[j, f'{hpo}_organ_system'])=='nan':
@@ -1253,7 +1299,7 @@ def searchTF_IDF_for_R(df,tools,pwd,filename):
                 pus_hpo_tf_idf.loc[m,'groups'] = 'Group'+str(int(pus_hpo_df.loc[k, 'conclusion']))
                 print(pus_hpo_df.loc[k, 'conclusion'])
                 pus_hpo_tf_idf.loc[m, 'tf-idf'] = weight
-                cmd =f"grep -E '{hpo_id_input[hpo_n]}' {pwd}/{filename}/hpo_count.tsv"
+                cmd =f"grep -E '{hpo_id_input[hpo_n]}' {pwd}/{filename}/hpo_count.tsv" ##每个HPO在HPO官网上与多少基因关联
                 count = subprocess.getoutput(cmd)
                 if count!='':
                     pus_hpo_tf_idf.loc[m,'gene_anno_number'] = int((count).split(' ')[-2])
@@ -1263,3 +1309,40 @@ def searchTF_IDF_for_R(df,tools,pwd,filename):
         except Exception as e:
             print(e)
     pus_hpo_tf_idf.to_csv('pus_TF_IDF.tsv',sep='\t',index=False)
+
+def searchTF_IDF_for_correlation(tools,pwd,filename):
+    intrisic_weight_df = pd.read_csv(f'{pwd}/weight.csv')
+    intrisic_weight_df = intrisic_weight_df.set_index('hpo_id')
+    pus_hpo_df = read_xlsx(f'{pwd}/{filename}/存档/【统计】hpo_id_13_rank_with_vcf_len_50.xlsx','rp')
+    pus_hpo_tf_idf = pd.DataFrame(columns = ['case_id','hpo_id_input','tools','rp','tf_idf_sum','hpo_gene_anno_number_sum','HPO_n','hpo_id_organ_system_number'])
+    m=0
+    for k in tqdm(range(len(pus_hpo_df))):
+        hpo_id = pus_hpo_df.loc[k, 'hpo_id_input'][2:-2]
+        hpo_id_input = [hpo for hpo in hpo_id.split("', '")]
+        weight_sum = 0
+        gene_anno_number_sum = 0
+        for hpo_n in range(len(hpo_id_input)):
+            try:
+                weight_sum = weight_sum + float(intrisic_weight_df.loc[hpo_id_input[hpo_n],'intrinsic_weight'])
+                cmd =f"grep -E '{hpo_id_input[hpo_n]}' {pwd}/{filename}/hpo_count.tsv" ##每个HPO在HPO官网上与多少基因关联
+                count = subprocess.getoutput(cmd)
+                if count!='':
+                    one_count = int((count).split(' ')[-2])
+                else:
+                    one_count = 0
+                gene_anno_number_sum = gene_anno_number_sum+one_count
+            except Exception as e:
+                print(e)
+        for tool in tools:
+            pus_hpo_tf_idf.loc[m,'tools'] = tool
+            pus_hpo_tf_idf.loc[m, 'rp'] = pus_hpo_df.loc[k,f'{tool}_rank']
+            pus_hpo_tf_idf.loc[m, 'tf_idf_sum'] = weight_sum
+            pus_hpo_tf_idf.loc[m, 'hpo_gene_anno_number_sum'] = gene_anno_number_sum
+            pus_hpo_tf_idf.loc[m, 'case_id'] = pus_hpo_df.loc[k, 'CaseID']
+            pus_hpo_tf_idf.loc[m, 'hpo_id_input'] = pus_hpo_df.loc[k, 'hpo_id_input']
+            pus_hpo_tf_idf.loc[m, 'HPO_n'] = pus_hpo_df.loc[k, 'HPO_n']
+            pus_hpo_tf_idf.loc[m, 'hpo_id_organ_system_number'] = pus_hpo_df.loc[k, 'hpo_id_organ_system_number']
+            m = m+1
+            print(m)
+
+    pus_hpo_tf_idf.to_csv('HPO_anno_TF_IDF_rp.tsv',sep='\t',index=False)

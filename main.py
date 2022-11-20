@@ -9,20 +9,18 @@ from script.functions import *
 from script.file_prepare_script import *
 from script.Integrated_tools import *
 
-def main_2(tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=False, statistic = True, refresh=False, newcase_runtool=False, newvcfgz=False, collect_variants_tofile = False, collect_organ = True):
+def main_2(df,pwd,filename,tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=False, statistic = True, refresh=False, newcase_runtool=False, newvcfgz=False, collect_variants_tofile = False, collect_organ = True):
 
-    filename = 'scoliosis_gVCF_from_zs_updating'
-    pwd = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis'
 
     df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx',' organ_system')
     df_sex = read_xlsx('/Users/liyaqi/Documents/生信/gvcf-scoliosis-2022.xlsx', 'case')
-    df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
+
 
     ## 可以按需要修改manual vcf tsv的地址，在get_case_id_file()中输入
     #df = df[7:8].reset_index(drop=True)
     case_ids = df['Blood ID']
     if collect_organ:
-        df = readobo(df,hpo,df_organ,save=False)
+        df = readobo(df,hpo,df_organ,save=True)
     print(f"{len(df)}")
 
     if newcase_runtool:
@@ -30,7 +28,7 @@ def main_2(tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=Fa
         if newvcfgz:
             getvcf_from_zs_gz(pwd, filename)
 
-        file_prepare_multiple_source(df, pwd, filename, intersect,REVEL_thresh=REVEL_thresh, CADD_thresh=CADD_thresh, refresh=refresh)
+        file_prepare_multiple_source(df, pwd, filename, intersect,REVEL_thresh=REVEL_thresh, CADD_thresh=CADD_thresh, refresh=False)
         ## 准备.s.vcf 或者 .flt.vcf 如果intersect 准备 vcf和转化txt，如果score filter，准备各种预置txt
         svcf_vcf_adress_df = pd.read_csv(f'{pwd}/{filename}/log/standard_vcf_adreess_file.csv').set_index('case_id')
         svcf_vcf_adress_dict = svcf_vcf_adress_df['vcf_file_address'].to_dict()
@@ -61,7 +59,7 @@ def main_2(tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=Fa
                 phen2gene_rank(df,pwd=pwd, filename=filename, profile=f'candidategene',refresh=refresh)
             if len(REVEL_thresh)!=0:
                 for thresh in REVEL_thresh:
-                    phen2gene_rank(df,pwd=pwd, filename=filename, profile=f'revel_{thresh}',refresh=True)
+                    phen2gene_rank(df,pwd=pwd, filename=filename, profile=f'revel_{thresh}',refresh=refresh)
             ## phen2gene重新跑REVEL
             if len(CADD_thresh)!=0:
                 for thresh in CADD_thresh:
@@ -115,13 +113,15 @@ def main_2(tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=Fa
             Phenogenius_rank(df, pwd, filename, hpo, refresh)
             print('PhenoGenius ready')
         if 'HANRD' in tools:
-            get_HANRD(df,pwd,filename,hpo,refresh=refresh,refresh_seperate_file=refresh)
+            get_HANRD(df,pwd,filename,hpo,refresh=True)
             print('HANRD ready')
         if 'GADO' in tools:
             GADO(df,pwd,filename,hpo,refresh=refresh)
+            print('GADO finish')
             ## 每次增加case都会重新生成hpototal，相当于每次都refresh了hpo；新的hpo
         if 'phenolyzer' in tools:
-            phenolyzer(df,pwd,filename,hpo,refresh=refresh)
+            phenolyzer(df,pwd,filename,hpo,refresh=True,refresh_hpo_txt=True)
+            print('phenolyzer finish')
             # 注意关闭terminal；各个软件结果都有缓存，有新case时才设置True;需要全部cohort重新生成hpotxt的时候再refresh，单纯增加了case会直接加上,单纯增加一种hpo输入，可直接输入在hpo里面; 需要更新hpo的时候，不论完整版还是weight版任何一行做了修改，也是要refresh整个cohort的
         if 'phrank'in tools:
             phrank_rank(df=df,pwd=pwd,filename=filename, mode='OMIM', hpo=hpo, refresh=refresh)
@@ -155,7 +155,7 @@ def main_2(tools=[], CADD_thresh=[], REVEL_thresh=[], hpo='hpo_id', intersect=Fa
 
         if 'phenomizer' in tools:
             print('manually search on website\nhttps://compbio.charite.de/phenomizer/')
-            os.system(f'cd {pwd}/{filename}/phenomizeroutput && bash delet2df.sh')
+            os.system(f'cd {pwd}/{filename}/phenomizeroutput/{hpo} && bash delet2df.sh')
 
         if 'phen-gen' in tools:
             generateped(df,pwd,filename,refresh,df_sex)
@@ -176,16 +176,21 @@ if __name__ == '__main__':
     filename = 'scoliosis_gVCF_from_zs_updating'
     pwd = '/Users/liyaqi/PycharmProjects/PhenoAptAnalysis'
     df = read_gvcf_diagnosis_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx')
-    tools = ['phenoapt', 'phenomizer', 'phenolyzer', 'GADO', 'PhenoRank', 'phen2gene', 'phrank', 'HANRD', 'LIRICAL',
-                      'Exomiser','Exomiser13.1.0','PhenoGenius','phen-gen']
+    tools = ['phenoapt', 'phenomizer', 'phenolyzer', 'GADO', 'PhenoRank','phen2gene', 'phrank', 'HANRD', 'LIRICAL',
+                      'Exomiser','Exomiser13.1.0','PhenoGenius']
+    # pheno_only_tools = ['phenoapt', 'phenomizer', 'phenolyzer', 'GADO', 'PhenoRank', 'phen2gene', 'phrank', 'HANRD', 'PhenoGenius']
+    REVEL_thresh = [0.25, 0.5, 0.75]
+    CADD_thresh = [10, 15, 20]
+    # Rscript_brief_benchmark(tools, True, REVEL_thresh, CADD_thresh)
+    get_HANRD(df, pwd, filename, 'hpo_id', refresh=False)
 
     #compare_df_for_R(df, tools, pwd, 'wilcoxon', dMRR_heatmap=False)
     # file_prepare_multiple_source(df, pwd, filename, intersect=True, REVEL_thresh=[0.25,0.5,0.75],CADD_thresh=[10,15,20], refresh=False)
     ##各种策略 for integrated tools
-    main_2(tools=tools,REVEL_thresh=[0.25,0.5,0.75],CADD_thresh=[10,15,20], hpo='hpo_id', intersect=True, statistic = True, refresh=False, newcase_runtool=False, newvcfgz=False, collect_variants_tofile = False, collect_organ = False)
+    # main_2(df,pwd,filename,tools=['HANRD'], hpo='hpo_id', intersect=True, REVEL_thresh=REVEL_thresh,CADD_thresh=CADD_thresh,statistic = True, refresh=False, newcase_runtool=True, newvcfgz=False, collect_variants_tofile = False, collect_organ = False)
 
     ##统计
-    # statistic_to_table(df, pwd, filename, 'hpo_id', tools=['phenomizer'], intersect=True, REVEL_thresh=[0.25,0.5,0.75], CADD_thresh=[10,15,20],collect_variants_tofile=False,collect_organ=False)
+    # statistic_to_table(df, pwd, filename, 'hpo_id', tools=tools, intersect=True, REVEL_thresh=[0.25,0.5,0.75], CADD_thresh=[10,15,20],collect_variants_tofile=False,collect_organ=False)
     #'phenoapt', 'GADO', 'phrank', 'phenolyzer'
     ##给df注释器官信息
     #df_organ = read_xlsx('/Users/liyaqi/Documents/生信/gVCF-2022-确诊.xlsx', ' organ_system')

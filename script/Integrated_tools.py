@@ -83,7 +83,7 @@ def generateyml_zs_diag_zs_gVCF(df,vcf_file_dict,pwd,filename,hpo,mode='',refres
     for i in range(len(df)):
         case_id = df.loc[i,'Blood ID']
         vcfdir = vcf_file_dict[case_id]
-        #Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
+        Inheritance_ADAR = df.loc[i,'Inheritance_ADAR']
         if case_id not in vcf_file_dict.keys():
             print(f"no vcf for {case_id}")
             n = n + 1
@@ -112,7 +112,7 @@ def generateyml_zs_diag_zs_gVCF(df,vcf_file_dict,pwd,filename,hpo,mode='',refres
                 os.system(f'mkdir {pwd}/{filename}/{ymldir}')
             if outputdir not in os.listdir(dir_scoliosis_gVCF_from_zs):
                 os.system(f'mkdir {dir_scoliosis_gVCF_from_zs}/{outputdir}')
-            if (case_id not in " ".join(os.listdir(f'{pwd}/{filename}/{outputdir}'))) or refresh:
+            if (f'{case_id}_{Inheritance_ADAR}' not in " ".join(os.listdir(f'{pwd}/{filename}/{outputdir}'))) or refresh:
                 if (f'{case_id}_{hpo}.yml' not in os.listdir(f'{pwd}/{filename}/{ymldir}')) or refresh:
                     getyml_for_certain_ingeritance(case_id, hpo_id_input, pwd, filename, vcfdir, ymldir, outputdir,
                                                    inheridict, hpo)
