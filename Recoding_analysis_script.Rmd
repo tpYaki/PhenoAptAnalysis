@@ -1,0 +1,1385 @@
+---
+title: "Weight_script"
+output: html_document
+date: '2023-02-08'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+  
+
+```
+
+##   benchmark plot preprare
+```{r}
+Add_a_column <- function(data_set, strategy) {
+  data_set$strategy<-gsub('phenoapt_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('phenoapt_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('phenomizer_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('phenolyzer_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('GADO_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('phen2gene_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('phrank_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('HANRD_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank$','Integrated_tools',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_intersect','Integrated_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_revel_0.25','Integrated_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_revel_0.5','Integrated_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_revel_0.75','Integrated_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_cadd_10','Integrated_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_cadd_15','Integrated_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('LIRICAL_rank_cadd_20','Integrated_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank$','Integrated_tools',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_intersect','Integrated_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_revel_0.25','Integrated_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_revel_0.5','Integrated_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_revel_0.75','Integrated_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_cadd_10','Integrated_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_cadd_15','Integrated_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser_rank_cadd_20','Integrated_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank$','Integrated_tools',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_intersect','Integrated_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_revel_0.25','Integrated_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_revel_0.5','Integrated_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_revel_0.75','Integrated_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_cadd_10','Integrated_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_cadd_15','Integrated_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('Exomiser13.1.0_rank_cadd_20','Integrated_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('PhenoGenius_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank$','Pheno_only_tools',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_intersect','Pheno_only_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_revel_0.25','Pheno_only_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_revel_0.5','Pheno_only_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_revel_0.75','Pheno_only_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_cadd_10','Pheno_only_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_cadd_15','Pheno_only_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('PhenoRank_rank_cadd_20','Pheno_only_CADD_20',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank$','Integrated_tools',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_intersect','Integrated_Qual_Freq_Filter',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_revel_0.25','Integrated_REVEL_0.25',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_revel_0.5','Integrated_REVEL_0.5',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_revel_0.75','Integrated_REVEL_0.75',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_cadd_10','Integrated_CADD_10',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_cadd_15','Integrated_CADD_15',data_set$strategy)
+  data_set$strategy<-gsub('Xrare_rank_cadd_20','Integrated_CADD_20',data_set$strategy)
+  return(data_set)
+}
+```
+
+
+```{r}
+Change_label_name=function(data_set,variable){
+data_set$variable<-gsub('phenoapt_rank$','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_intersect','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_revel_0.25','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_revel_0.5','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_revel_0.75','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_cadd_10','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_cadd_15','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenoapt_rank_cadd_20','PhenoApt',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank$','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_intersect','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_revel_0.25','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_revel_0.5','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_revel_0.75','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_cadd_10','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_cadd_15','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenomizer_rank_cadd_20','Phenomizer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank$','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_intersect','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_revel_0.25','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_revel_0.5','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_revel_0.75','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_cadd_10','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_cadd_15','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('phenolyzer_rank_cadd_20','Phenolyzer',data_set$variable)
+data_set$variable<-gsub('GADO_rank$','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_intersect','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_revel_0.25','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_revel_0.5','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_revel_0.75','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_cadd_10','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_cadd_15','GADO',data_set$variable)
+data_set$variable<-gsub('GADO_rank_cadd_20','GADO',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank$','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_intersect','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_revel_0.25','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_revel_0.5','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_revel_0.75','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_cadd_10','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_cadd_15','PhenoRank',data_set$variable)
+data_set$variable<-gsub('PhenoRank_rank_cadd_20','PhenoRank',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank$','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_intersect','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_revel_0.25','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_revel_0.5','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_revel_0.75','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_cadd_10','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_cadd_15','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phen2gene_rank_cadd_20','Phen2Gene',data_set$variable)
+data_set$variable<-gsub('phrank_rank$','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_intersect','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_revel_0.25','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_revel_0.5','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_revel_0.75','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_cadd_10','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_cadd_15','Phrank',data_set$variable)
+data_set$variable<-gsub('phrank_rank_cadd_20','Phrank',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank$','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_intersect','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_revel_0.25','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_revel_0.5','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_revel_0.75','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_cadd_10','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_cadd_15','LIRICAL',data_set$variable)
+data_set$variable<-gsub('LIRICAL_rank_cadd_20','LIRICAL',data_set$variable)
+data_set$variable<-gsub('HANRD_rank$','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_intersect','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_revel_0.25','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_revel_0.5','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_revel_0.75','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_cadd_10','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_cadd_15','HANRD',data_set$variable)
+data_set$variable<-gsub('HANRD_rank_cadd_20','HANRD',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank$','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_intersect','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_revel_0.25','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_revel_0.5','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_revel_0.75','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_cadd_10','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_cadd_15','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('Exomiser13.1.0_rank_cadd_20','Exomiser13.1.0',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank$','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_intersect','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_revel_0.25','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_revel_0.5','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_revel_0.75','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_cadd_10','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_cadd_15','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('PhenoGenius_rank_cadd_20','PhenoGenius',data_set$variable)
+data_set$variable<-gsub('Xrare_rank$','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_intersect','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_revel_0.25','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_revel_0.5','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_revel_0.75','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_cadd_10','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_cadd_15','Xrare',data_set$variable)
+data_set$variable<-gsub('Xrare_rank_cadd_20','Xrare',data_set$variable)
+return(data_set)
+}
+```
+
+
+```{r}
+dat_0 = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/存档/revised_hpo_id_12_rank_with_vcf_len_281.csv', row.names = 2, header = T)
+#dat_1 = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/hpo_id_12_rr_with_vcf_len_281.tsv', row.names = 2, header = T, sep = '\t')
+#dat_2 = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/hpo_id_12_rp_len_281.tsv', header = T, sep = '\t')
+dat_3 = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/存档/hpo_id_12_rank_len_281.csv', row.names = 2, header = T, sep = ',')
+library('dplyr')
+#data_rr = dat_1
+cols_to_keep = grep("rank", names(dat_0))
+data_rank = dat_0[,cols_to_keep]
+col_to_delet = grep("score", names(data_rank))
+data_rank = data_rank[, -col_to_delet]
+data_rank
+```
+
+
+##   count from result category
+
+```{r}
+##-----绘图区-------##
+map=data_rank
+mapname = names(map)
+rowname = c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','>100','filtered_by_revel_0.25','filtered_by_revel_0.5','filtered_by_revel_0.75','filtered_by_cadd_10','filtered_by_cadd_15','filtered_by_cadd_20','not ranked','not_in_filtered_tsv')
+map_dat = data.frame()
+map_dat = data.frame(row.names = rowname)
+for (j in rowname){
+  for (i in mapname){
+    print(i)
+    print(map[,i])
+    map_dat[j,i]<-sum(map[,i]==j)
+  }
+}
+map_dat$rank<-rowname
+map_dat$rank<-factor(map_dat$rank,levels = rev(map_dat$rank))
+map_dat
+
+   
+```
+```{r}
+# 加载必要的包
+library(stats)
+library(multcomp)
+
+# 定义数据
+data <- data.frame(
+  Category = c("Top1", "Top5", "Top10", "Top20"),
+  PhenoGenius = c(34, 81, 111, 150),
+  Exomiser = c(168, 239, 249, 253),
+  Total = c(281, 281, 281, 281)
+)
+
+# 初始化结果向量
+p_values <- numeric(length = nrow(data))
+
+# 逐行进行卡方检验
+for (i in 1:nrow(data)) {
+  observed <- c(data$PhenoGenius[i], data$Exomiser[i])
+  expected <- data$Total[i] * c(sum(data$PhenoGenius) / sum(data$Total), sum(data$Exomiser) / sum(data$Total))
+  chi_sq_test <- chisq.test(x = observed, p = expected / sum(expected))
+  p_values[i] <- chi_sq_test$p.value
+}
+
+# 应用Benjamini-Hochberg调整
+p_adjusted <- p.adjust(p_values, method = "BH")
+
+# 添加p值和调整后的p值到数据框
+data$p_value <- p_values
+data$p_adjusted <- p_adjusted
+
+# 输出结果
+print(data)
+
+```
+
+##   prepare data from benchmark
+```{r setup, include=FALSE}
+map_dat$rank<-rowname
+map_dat$rank<-factor(map_dat$rank,levels = rev(map_dat$rank))
+##----搁在map_dat里转化成画图格式----##
+library(reshape2)
+data_set<-melt(map_dat,id.vars='rank')
+
+##加一列分类工具##
+data_set$strategy<-data_set$variable
+data_set=Add_a_column(data_set,strategy)
+data_set$label<-data_set$variable
+data_set = Change_label_name(data_set,label)
+data_set$variable = factor(data_set$variable,levels=c("Phenomizer" ,"Phenolyzer","GADO","PhenoRank","Phen2Gene","Phrank","HANRD","PhenoApt","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare"),label=c("Phenomizer" ,"Phenolyzer","GADO","PhenoRank","Phen2gene","Phrank","HANRD","PhenoApt","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare"))
+data_set$strategy<-factor(data_set$strategy,levels=c('Pheno_only_tools', 'Pheno_only_Qual_Freq_Filter', 'Pheno_only_REVEL_0.25', 'Pheno_only_REVEL_0.5', 'Pheno_only_REVEL_0.75', 'Pheno_only_CADD_10', 'Pheno_only_CADD_15', 'Pheno_only_CADD_20', 'Integrated_tools', 'Integrated_Qual_Freq_Filter', 'Integrated_REVEL_0.25', 'Integrated_REVEL_0.5', 'Integrated_REVEL_0.75', 'Integrated_CADD_10', 'Integrated_CADD_15', 'Integrated_CADD_20'))
+data_set$strategy_up<-factor(data_set$strategy,levels=c('Pheno_only_tools', 'Pheno_only_Qual_Freq_Filter', 'Pheno_only_REVEL_0.25', 'Pheno_only_REVEL_0.5', 'Pheno_only_REVEL_0.75', 'Pheno_only_CADD_10', 'Pheno_only_CADD_15', 'Pheno_only_CADD_20', 'Integrated_tools', 'Integrated_Qual_Freq_Filter', 'Integrated_REVEL_0.25', 'Integrated_REVEL_0.5', 'Integrated_REVEL_0.75', 'Integrated_CADD_10', 'Integrated_CADD_15', 'Integrated_CADD_20'),labels=c('Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Pheno-only tools', 'Integrated tools', 'Integrated tools', 'Integrated tools', 'Integrated tools', 'Integrated tools', 'Integrated tools', 'Integrated tools', 'Integrated tools'))
+data_set$strategy_down<-factor(data_set$strategy,levels=c('Pheno_only_tools', 'Pheno_only_Qual_Freq_Filter', 'Pheno_only_REVEL_0.25', 'Pheno_only_REVEL_0.5', 'Pheno_only_REVEL_0.75', 'Pheno_only_CADD_10', 'Pheno_only_CADD_15', 'Pheno_only_CADD_20', 'Integrated_tools', 'Integrated_Qual_Freq_Filter', 'Integrated_REVEL_0.25', 'Integrated_REVEL_0.5', 'Integrated_REVEL_0.75', 'Integrated_CADD_10', 'Integrated_CADD_15', 'Integrated_CADD_20'),labels=c('Original Input Setting', 'Qual&Freq', 'Qual&Freq + REVEL 0.25', 'Qual&Freq + REVEL 0.5', 'Qual&Freq + REVEL 0.75', 'Qual&Freq + CADD 10', 'Qual&Freq + CADD 15', 'Qual&Freq + CADD 20', 'Original Input Setting','Qual&Freq', 'Qual&Freq + REVEL 0.25', 'Qual&Freq + REVEL 0.5', 'Qual&Freq + REVEL 0.75', 'Qual&Freq + CADD 10', 'Qual&Freq + CADD 15', 'Qual&Freq + CADD 20'))
+data_set$rank = factor(data_set$rank,levels=rev(c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','>100','not ranked','not_in_filtered_tsv','filtered_by_revel_0.25','filtered_by_revel_0.5','filtered_by_revel_0.75','filtered_by_cadd_10','filtered_by_cadd_15','filtered_by_cadd_20')),labels=rev(c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','Rank>100','Not Ranked','Filtered by Quality and Frequency','Filtered by REVEL 0.25','Filtered by REVEL 0.5','Filtered by REVEL 0.75','Filtered by CADD 10','Filtered by CADD 15','Filtered by CADD 20')))
+
+data_set_0=subset(data_set,data_set$strategy=='Pheno_only_tools' | data_set$strategy=='Integrated_tools')
+data_set_0_p=subset(data_set_0,data_set_0$rank %in% c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','Rank>100','Not Ranked'))
+
+data_set_2=subset(data_set,data_set$strategy %in% c('Pheno_only_Qual_Freq_Filter','Pheno_only_REVEL_0.75','Pheno_only_CADD_20','Integrated_Qual_Freq_Filter','Integrated_REVEL_0.75','Integrated_CADD_20'))
+data_set_2_p=subset(data_set_2,data_set_2$rank %in% c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','Rank>100','Not Ranked','Filtered by REVEL 0.75','Filtered by CADD 20'))
+
+# number of 'Filtered by Quality and Frequency'==0 in 281
+```
+
+```{r}
+data_set_2_p[data_set_2_p$rank=='Not Ranked',]
+```
+
+
+##Figure2 benchmark_graph_tools
+```{r setup, include=FALSE}
+library(scales)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+# Define the number of colors you want
+nb.cols <- length(rowname)
+#mycolors <- colorRampPalette(brewer.pal(10, "Set3"))(nb.cols)
+mycolors=get_palette(palette = "npg",12)
+p_bench <- ggplot(data = data_set_0_p, aes(x = variable, y = value, fill = rank)) + 
+                   
+                   theme_bw()+
+                   
+                   geom_bar(stat='identity',position = 'fill',width = 0.5) +#堆叠图，position = fill 表示堆叠图
+                   
+                   facet_grid(~strategy_up,scales='free_x',space = 'free')+
+  
+  theme(strip.text = element_text(size = 20))+
+  
+  labs(x = 'Tools',y = 'Percentage',fill = NULL)+ #定义坐标轴以及图例标题
+  
+  scale_fill_manual(values = mycolors) + ##自定义颜色，可通过`library(RColorBrewer);display.brewer.all()`来展示所有备选项；geom_point(colour =)也可以设定点颜色
+  scale_y_continuous(n.breaks =10,labels = scales::percent) +
+  
+  guides(fill = guide_legend(ncol = 8, bycol = T, override.aes = list(size = 5))) +#定义图例的布局，1列，排序，图例中色块的大小增大5倍
+  
+  theme(axis.title.y = element_text(color = 'black',size = 30),
+      axis.title.x = element_text(color = 'black',size = 30,vjust = 2.2),
+      axis.text.y = element_text(color = 'black',size = 20),
+      axis.text.x = element_text(color = 'black',size = 20,angle = 45,vjust = 1,hjust = 1), #x轴标签偏转45°，并下降0.5
+      panel.grid = element_blank(),
+      legend.position = 'top',
+      legend.key.height = unit(0.6,'cm'),#定义图例中色块的高度
+      legend.text = element_text(color = 'black',size = 30),
+      legend.title = element_text(color = 'black',size = 30),
+      plot.title = element_text(size = 30))+
+      theme(plot.margin = unit(c(1,1,1,1), "cm"))+
+    ggtitle("B.Original tool Settings with comprehensive HPOs (n=281)")
+p_bench
+#ggsave(filename = 'benchmark_pheno-integ.png',width = 20, height = 10)
+# mycolors=get_palette(palette = "jco",8)
+# # p_spectrum = pie()
+```
+
+
+## filtered benchmark
+```{r setup, include=FALSE}
+library(ggpubr)
+nb.cols <- length(c('TOP1','TOP5','TOP10','TOP20','TOP50','TOP100','Rank>100','Not Ranked','Filtered by REVEL 0.75','Filtered by CADD 20'))
+mycolors=get_palette(palette = "npg", 12)
+p_filter <- ggplot(data = data_set_2_p, aes(x = variable, y = value, fill = rank)) + 
+  
+  theme_bw()+
+  geom_bar(stat='identity',position = 'fill',width = 0.5)+
+  facet_grid(~strategy_up+strategy_down,scales='free_x',space = 'free')+
+  scale_y_continuous(n.breaks =10,labels = scales::percent)+
+  
+  theme(strip.text = element_text(size = 13,face = 'bold'))+#facet标题格式
+  
+  labs(x = 'Tools',y = 'Percentage',fill = NULL)+ #定义坐标轴以及图例标题
+  
+  scale_fill_manual(values = mycolors) + ##自定义颜色，可通过`library(RColorBrewer);display.brewer.all()`来展示所有备选项；geom_point(colour =)也可以设定点颜色
+  
+  guides(fill = guide_legend(ncol = 10, bycol = T, override.aes = list(size = 5))) +#定义图例的布局，1列，排序，图例中色块的大小增大5倍
+  
+  theme(
+    axis.title.y = element_text(color = 'black',size = 30),
+    axis.title.x = element_text(color = 'black',size = 30,vjust = 2.2),
+    axis.text.y = element_text(color = 'black',size = 20),
+    axis.text.x = element_text(color = 'black',size = 20,angle = 45,vjust = 1,hjust = 1), #x轴标签偏转45°，并下降0.5
+    panel.grid = element_blank(),
+    legend.position = 'top',
+    legend.key.height = unit(0.6,'cm'),#定义图例中色块的高度
+    legend.text = element_text(color = 'black',size = 30),
+    legend.title = element_text(color = 'black',size = 30),
+      plot.title = element_text(size = 30))+
+      theme(plot.margin = unit(c(1,1,1,1), "cm"))+
+    ggtitle("A. Intersect Strategy Benchmark (n=281)")
+
+p_filter
+#ggsave(filename = 'benchmark_filter.png',width = 35, height = 10)
+  
+
+```
+
+## TOP1   TOP5   TOP 10   TOP20 折线图prepare
+```{r setup, include=FALSE}
+data_top1 = subset(data_set,data_set$rank%in%("TOP1"))
+data_top1_p = data_top1[,colnames(data_top1) %in% c('variable','value','strategy_down')]
+data_top1_p$value = data_top1_p$value/281
+data_top5 = subset(data_set,data_set$rank%in%("TOP5"))
+data_top5_p = data_top5[,colnames(data_top5) %in% c('variable','value','strategy_down')]
+data_top5_p$value = data_top1$value+data_top5$value
+data_top5_p$value = data_top5_p$value/281
+data_top10 = subset(data_set,data_set$rank%in%("TOP10"))
+data_top10_p = data_top10[,colnames(data_top10) %in% c('variable','value','strategy_down')]
+data_top10_p$value = data_top1$value+data_top5$value+data_top10$value
+data_top10_p$value = data_top10_p$value/281
+data_top20 = subset(data_set,data_set$rank%in%("TOP20"))
+data_top20_p = data_top20[,colnames(data_top20) %in% c('variable','value','strategy_down')]
+data_top20_p$value = data_top1$value+data_top5$value+data_top10$value+data_top20$value
+data_top20_p$value = data_top20_p$value/281
+
+  
+  
+```
+
+## TOP1   TOP5   TOP 10   TOP20 折线图
+```{r}
+mycolors=get_palette(palette = "npg", 12)
+
+top_plot_legend=function(data_sheet,TOPx,name){
+  data_sheet$variable = factor(data_sheet$variable,levels = rev(c("PhenoRank","GADO","Phen2gene","Phenolyzer","Phenomizer","HANRD" ,"Phrank","PhenoApt","PhenoGenius","LIRICAL","Exomiser13.1.0","Xrare")))
+  p_top=ggplot(data=data_sheet, aes(x=strategy_down, y=value, group=variable))+geom_line(aes(color=variable),size=2)+
+  geom_point(aes(color=variable),size=6)+theme_bw()+
+scale_color_manual('Tools',values = mycolors) + 
+    scale_y_continuous(n.breaks =10,labels = scales::percent, limits = c(0,1))+
+    labs(x = 'Genotype Input Settings',y = TOPx ,fill = NULL)+
+    theme(
+        panel.grid.major=element_line(colour=grey(0.9)),
+        axis.title.y = element_text(color = 'black',size = 25),
+        axis.title.x = element_text(color = 'black',size = 25,vjust = -1),
+        axis.text.y = element_text(color = 'black',size =20),
+        axis.text.x = element_text(color = 'black',size = 20,angle =45,vjust = 1,hjust = 1), #x轴标签偏转45°，并下降0.5
+        panel.grid = element_blank())+
+        guides(fill = guide_legend(title="Tools",ncol = 15, bycol = T, override.aes = list(size = 20)))+
+    theme(
+      legend.position = 'right',
+      legend.key.height = unit(1,'cm'),#定义图例中色块的间隔
+      legend.text = element_text(color = 'black',size = 20),
+      legend.title = element_text(color = 'black',size = 20),
+      plot.title = element_text(size = 30))+
+      theme(plot.margin = unit(c(1,1,1,1), "cm"))+
+    ggtitle(name)
+
+  plot(p_top)
+  return(p_top)
+}
+
+top_plot_no_legend=function(data_sheet,TOPx,name){
+  data_sheet$variable = factor(data_sheet$variable,levels = rev(c("PhenoRank","GADO","Phen2gene","Phenolyzer","Phenomizer","HANRD" ,"Phrank","PhenoApt","PhenoGenius","LIRICAL","Exomiser13.1.0","Xrare")))
+  p_top=ggplot(data=data_sheet, aes(x=strategy_down, y=value, group=variable))+geom_line(aes(color=variable),size=2)+
+  geom_point(aes(color=variable),size=6)+theme_bw()+
+scale_color_manual(values = mycolors) + 
+    scale_y_continuous(n.breaks =10,labels = scales::percent,limits = c(0,1))+
+    labs(x = 'Genotype Input Settings',y = TOPx ,fill = NULL)+
+    theme(strip.text = element_text(size = 25))+
+    theme(
+        panel.grid.major=element_line(colour=grey(0.9)),
+        axis.title.y = element_text(color = 'black',size = 25),
+        axis.title.x = element_text(color = 'black',size = 25,vjust = -1),
+        axis.text.y = element_text(color = 'black',size =20),
+        axis.text.x = element_text(color = 'black',size = 20,angle =45,vjust = 1,hjust = 1), 
+        panel.grid = element_blank())+
+    theme(legend.position = 'none',
+    plot.title = element_text(size = 30),
+    plot.margin = unit(c(1,1,1,1), "cm"))+
+    ggtitle(name)
+  plot(p_top)
+  return(p_top)
+}
+
+top20_p = top_plot_legend(data_top20_p,'Percentage','\nTOP20 Percentage')
+top10_p = top_plot_no_legend(data_top10_p,'Percentage','\nTOP10 Percentage')
+top5_p = top_plot_no_legend(data_top5_p,'Percentage','\nTOP5 Percentage')
+top1_p = top_plot_no_legend(data_top1_p,'Percentage',"B.\nTOP1 Percentage")
+
+#绘制线图和点图
+# + scale_linetype_manual(values = c(1,2)) #自定义线条类型
+ #自定义颜色
+# + scale_shape_manual(values = c(21,23)) #自定义点形状
+# + scale_fill_manual(values = c('red','black')) #自定义点的填充色
+
+```
+
+## Sanky plot for demograph
+```{r setup, include=FALSE}
+install.packages('ggalluvial')
+require('ggalluvial')
+setwd("/Users/liyaqi/Rproject/PhenoAPT_trial_rank/figures_for_script/")
+dat_input_features = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/存档/combine_input_281.csv')
+dat_input_features$Frequency <- cut(dat_input_features$Frequency, breaks = c(-Inf, 0.000001, 0.00001, 0.0001,0.001,0.01, Inf), labels = c("<1E-06","[1E-06~1E-05)","[1E-05~0.01%)","[0.01%~0.1%)","[0.1%~1%)","≥1%"), right=FALSE, include.lowest=TRUE)
+dat_input_features$Gene = dat_input_features$Symbol
+hpo_n_t = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/存档/revised_hpo_id_12_rank_with_vcf_len_281.csv')
+dat_input_features$HPO_number = as.numeric(hpo_n_t$HPO_n)
+
+library(dplyr)
+dat_input_features <- dat_input_features %>%
+  mutate(cohort = ifelse(cohort %in% c('Congenital patella dislocation','Congenital osteoarthropathy','Familial osteoarthropathy','MRKH','Myopathy','Syndrome','CVJ','DM','EDS'), 'Others', cohort))
+
+dat_input_features <- dat_input_features %>%
+  mutate(Variant_class = ifelse(Variant_class %in% c('UTR','Intron','Synonymous','Inframe_indel'), 'Others', Variant_class))
+
+dat_input_features <- dat_input_features %>%
+  mutate(HPO_number = ifelse(HPO_number >=10, '>=10', HPO_number))
+level = c( as.character(seq(1, 9)),'>=10')
+dat_input_features$HPO_number = factor(dat_input_features$HPO_number,levels=level)
+
+ggplot(data = dat_input_features,aes(axis1 = HPO_number,axis2 = cohort,axis3 = Variant_class,axis4=Frequency))  +
+  geom_alluvium(aes(fill=Gene), width = 2/5, discern = TRUE) +
+  geom_stratum(width = 2/5, discern = TRUE,alpha=0.6) +
+  geom_text(stat = "stratum", discern = TRUE, aes(label = after_stat(stratum)),color = "black",size = 2) + 
+  geom_label(stat = "stratum", aes(label = after_stat(stratum)), min.y = 200) + 
+  scale_x_discrete(limits = c("HPO number","Referral Programmes","Variant Class","Minor Allele Frequecy"), expand = c(.1, .1)) +
+  labs(x='Demographic Genetic Patterns', y = 'Number of Patients (N=281)',fill = 'Gene')+
+  theme_minimal()+
+  theme_bw()+
+  theme(axis.title.y = element_text(color = 'black',size = 15),
+        axis.title.x = element_text(color = 'black',size = 15),
+        axis.text.y = element_text(color = 'black',size = 15),
+        axis.text.x = element_text(color = 'black',size = 15), 
+        panel.grid = element_blank(),
+        legend.position = 'none')
+myfilename ="demographic_sanky_genetic.png"
+#ggsave(filename = myfilename,width =20, height = 20,limitsize = FALSE)
+
+```
+
+
+#Figure4 HPO subgroup
+
+```{r}
+knitr::opts_chunk$set(message = TRUE)
+##HPO subgroup
+##df0_phenoapt_4_strategy_rr input "Weight_{len(tools)}_rr_len_{len(df)}.tsv" "hpo_id_{len(tools)}_rr_len_{len(df)}.tsv'" output “” aim “展示同一个case在不同组别之间的表现变化，根据变化确定Weighted HPO和noise HPO的关系，确定分组”
+library(scales)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+df0=read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/phenoapt_4group_strategy_rr_281.tsv', header = T, sep = '\t')
+df0$Weight_strategy <- as.character(df0$Weight_strategy)
+df0$Weight_strategy <- factor(df0$Weight_strategy, levels=unique(df0$Weight_strategy))
+MRR = aggregate(df0$Reciprocal_rank, by=list(Category=df0$Weight_strategy), mean)
+df0
+  
+```
+
+## cohort在4种加权模式下的改变轨迹
+```{r}
+Weight_strategy = df0[,'Weight_strategy']
+Reciprocal_rank = df0[,'Reciprocal_rank']
+p2 = set_palette(ggplot(df0, aes(x = Weight_strategy, y = Reciprocal_rank)) +
+  geom_boxplot(aes(fill = Weight_strategy), alpha = 0.2),'jco') +
+  geom_point(aes(col = Weight_strategy)) +
+  geom_line(aes(group = df0[,'patients'],alpha=0.05), colour = "grey")+
+  stat_summary(fun=mean, colour="darkred", geom="point", size=3)+
+  stat_summary(fun=mean, colour="darkred", geom="text", size=5,
+               vjust=-0.7, aes( label=round(after_stat(y), digits=3)))+
+  theme_bw()+
+  labs(y ='Reciprocal rank')+
+  labs(x ='Weight strategy')+
+  theme(axis.title.y = element_text(face = 'bold',color = 'black',size = 30),
+      axis.title.x = element_text(face = 'bold',color = 'black',size = 30),
+      axis.text.y = element_text(face = 'bold',color = 'black',size = 25),
+      axis.text.x = element_text(face = 'bold',color = 'black',size = 15,angle = 15,vjust=1,hjust=1), 
+      panel.grid = element_blank(),
+      legend.position = 'bottom',
+      legend.key.height = unit(0.6,'cm'),#定义图例中色块的高度
+      legend.text = element_text(face = 'bold',color = 'black',size = 12),
+      legend.title = element_text(face = 'bold',color = 'black',size = 12))
+p2
+  
+```
+
+##HPO subgroup distribution
+
+```{r pressure, echo=FALSE}
+##HPO subgroup distribution 条形图在小提琴图下方做注脚，具体列表放到supp
+##subgroup  input “Weight_{tools_len}_rr_len_{len(df)}” output “Weight_{tools_len}_rr_len_{len(df)}_classified_subgrouped”
+subgroup_df = read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/Weight_14_rr_len_286_classified_subgrouped.tsv',sep='\t')
+subgroup_df
+  
+```
+
+##tf_idf_difference_analysis_between_subgroup
+
+```{r pressure, echo=FALSE}
+###searchTF_IDF_for_R input “Weight_{tools_len}_rr_len_{len(df)}_classified_subgrouped” output “pus_TF_IDF”######
+library(ggpubr)
+library(RColorBrewer)
+# install.packages('ggbeeswarm')
+# library(ggbeeswarm)
+# tf_idf_group=read.csv('/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/pus_TF_IDF.tsv', header = T, sep = '\t')
+tf_idf_group=read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/pus_TF_IDF.tsv', header = T, sep = '\t')
+tf_idf_group
+
+```
+
+```{r pressure, echo=FALSE, fig.height=2, fig.width=2, warning=TRUE}
+tf_idf_group=read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/pus_TF_IDF.tsv', header = T, sep = '\t')
+tf_idf_group
+comp<-unique(tf_idf_group$groups)
+tf_idf_group$groups = factor(tf_idf_group$groups,levels = c('-','o','+'),labels = c('-','o','+'))
+my_comparisons <- list(c(comp[1],comp[2]),c(comp[1],comp[3]),c(comp[2],comp[3]))
+p7=set_palette(ggviolin(tf_idf_group,x='groups', y='tf.idf', fill='groups',palette = c("#FFCCBC", "#9dd3cc", "#e1eeff","#d9d2e9"),trim = F)+
+  # geom_quasirandom(width = 0.2,size=0.5)+
+    stat_compare_means(comparisons = my_comparisons, label = "p.format", method = "wilcox.test",size=3,label.y=c(0.025,0.03,0.035))+
+    stat_summary(geom = 'errorbar',width = 0.1)+
+  theme_bw(),'jco')+
+  stat_summary(fun=mean, colour="black", geom="point", size=1)+
+  stat_summary(fun=mean, colour="black", geom="text", size=3,
+               vjust=-1, aes( label=round(..y.., digits=4)))+
+  ggtitle('Three kinds of noise HPOs grouped by Effect')+
+  theme(axis.title.y = element_text(face = 'bold',color = 'black',size = 10),
+        axis.title.x = element_text(face = 'bold',color = 'black',size = 10),
+        axis.text.y = element_text(face = 'bold',color = 'black',size = 10),
+        axis.text.x = element_text(face = 'bold',color = 'black',size =10),
+        panel.grid = element_blank(),
+        legend.position = 'top',
+        legend.key.height = unit(0.6,'cm'),#定义图例中色块的高度
+        legend.text = element_text(face = 'bold',color = 'black',size = 10),
+        legend.title = element_text(face = 'bold',color = 'black',size = 10))
+p7
+ggsave(filename = 'HPOs_subgroup_tf_idf_difference.png',width = 5, height = 5)
+  
+```
+
+##tf_idf_correlation_analysis_between_all_case(classify_TOP10 or 20)
+
+```{r pressure, echo=FALSE}
+features_df=read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/11_tools_original_rank_features_281_annoted.tsv', header = T, sep = '\t')
+library(ggplot2)
+library(ggpubr)
+features_df$tf_idf_ave = features_df$tf_idf_sum/features_df$HPO_n
+features_df$hpo_gene_anno_number_ave = features_df$hpo_gene_anno_number/features_df$HPO_n
+features_df = subset(features_df, select = -groups)
+features_df
+
+```
+##single variable  tf_idf hpo_n correlated_gene_number
+
+
+```{r pressure, echo=FALSE}
+
+
+```
+
+##multiple lm  tf_idf hpo_n correlated_gene_number
+```{r pressure, echo=FALSE}
+# install.packages('tidyverse')
+# install.packages('yardstick')
+# install.packages('Metrics')
+require(tidyverse)
+require(yardstick)
+require(Metrics)
+require(png)
+require(car)
+setwd("/Users/liyaqi/Rproject/PhenoAPT_trial_rank/figures_for_script/")
+features_df = features_df[,3:ncol(features_df)]
+for (tool in unique(features_df$tools)){
+  tool_features_df = na.omit(subset(features_df,features_df$tools %in% c(tool)))
+  tool_features_df = tool_features_df[,-which(names(tool_features_df) %in% c("tools","hpo_id_input_organ_system"))]
+  tool_features_df[] <- lapply(tool_features_df, function(x) {
+  if (is.character(x) && !any(is.na(suppressWarnings(as.numeric(x))))) {
+    x <- as.numeric(x)
+   }
+    x
+  })
+  print(tool)
+  tool_features_df = scale(tool_features_df)
+  set.seed(1998)
+  idx = sample(nrow(tool_features_df), 0.8 * nrow(tool_features_df))
+  trainData  <- as.data.frame(tool_features_df[idx, ])
+  testData   <- as.data.frame(tool_features_df[-idx, ])
+  model <- lm(rank ~ tf_idf_ave+hpo_id_input_organ_system_number+HPO_n+hpo_gene_anno_number_ave+0,data = trainData)
+  model.AIC = step(model, direction="backward", test="F")
+  myggname <- paste(tool,"_lm_model_cehcks.pdf",sep="")
+  pdf(file =myggname,width = 5, height = 10)
+  par(mfrow=c(2,1))
+  plot(trainData$tf_idf_ave, model.AIC$residuals, main="Residuals vs tf_idf_ave")
+  abline(h = 0, col = "gray75")
+  qqPlot(model.AIC$residuals,las = 1, main="QQ Plot")
+  dev.off()
+  }
+for (tool in unique(features_df$tools))
+ {
+  tool_features_df = na.omit(subset(features_df,features_df$tools %in% c(tool)))
+  set.seed(1998)
+  idx = sample(nrow(tool_features_df), 0.8 * nrow(tool_features_df))
+  trainData  <- tool_features_df[idx, ]
+  testData   <- tool_features_df[-idx, ]
+  model <- lm(rank ~ tf_idf_ave+hpo_id_input_organ_system_number+HPO_n+hpo_gene_anno_number_ave+0,data = trainData)
+  model.AIC = step(model, direction="backward", test="F")
+  predictions <- predict(model.AIC, testData)
+  print((yardstick::rmse_vec(truth =testData$rank,estimate =predictions))/mean(testData$rank))
+  print(yardstick::rsq_vec(truth=testData$rank, estimate=predictions))
+  myfilename <- paste(tool,"_lm.txt",sep="")
+  sink(myfilename)
+  print(tool)
+  print(summary(model))
+  print(summary(model.AIC))
+  print(paste('RMSE',yardstick::rmse_vec(truth =testData$rank,estimate =predictions)/mean(testData$rank)),sep=" ")
+  print(paste('R2',yardstick::rsq_vec(truth=testData$rank, estimate=predictions),sep=" "))
+  sink()
+  }
+```
+
+
+```{r}
+for (tool in unique(features_df$tools)){
+  tool_features_df = na.omit(subset(features_df,features_df$tools %in% c(tool)))
+  tool_features_df = tool_features_df[,-which(names(tool_features_df) %in% c("tools","hpo_id_input_organ_system"))]
+  tool_features_df[] <- lapply(tool_features_df, function(x) {
+  if (is.character(x) && !any(is.na(suppressWarnings(as.numeric(x))))) {
+    x <- as.numeric(x)
+   }
+    x
+  })
+  print(tool)
+  print(colnames(tool_features_df))
+  tool_features_df = as.data.frame(scale(tool_features_df[,which(colnames(tool_features_df)%in%c('tf_idf_ave','hpo_gene_anno_number_ave','HPO_n','rank','hpo_id_input_organ_system_numbe'))]))
+  set.seed(1998)
+  myggname <- paste(tool,"_lm_model_plot.pdf",sep="")
+  pdf(file =myggname,width = 10, height = 10)
+  ggpairs(data = tool_features_df,title = tool)
+  dev.off()
+  }
+
+```
+
+## multiple linear regression
+```{r pressure, echo=FALSE}
+#install.packages("pROC")
+#install.packages("ResourceSelection")
+
+
+library(pROC)
+features_df1=features_df
+head(features_df1)
+
+NA_to_group=function(df_column,groupthresh){
+  df_column = cut(df_column, breaks = c(-Inf, groupthresh, Inf), labels = c(1,0), right=FALSE, include.lowest =TRUE)
+  df_column[is.na(df_column)]=0
+  return(df_column)
+}
+features_df1$TOP10 = features_df1$rank
+features_df1$TOP10 = NA_to_group(features_df1$TOP10,10)
+##1,TOP10;thresh +1才是真实排名，设置包含最小值，将=thresh的rank算成>的group
+features_df1$TOP20 = features_df1$rank
+features_df1$TOP20 = NA_to_group(features_df1$TOP20,20)
+features_df1_lg =subset(features_df1, hpo_id_input_organ_system_number!= 'NA')
+##TOP10
+library(pROC)
+for (tool in unique(features_df1_lg$tools))
+{
+  tool_features_df1_lg = subset(features_df1_lg,features_df1_lg$tools%in%tool)
+  lgrfit1<-glm(TOP10~tf_idf_ave+hpo_id_input_organ_system_number+HPO_n+hpo_gene_anno_number_ave+0, family=binomial(link = logit), data=tool_features_df1_lg)
+  myfilename <- paste(tool,"_lgr_top10.txt",sep="")
+  sink(myfilename)
+  print(summary(lgrfit1))
+  exp(cbind(OR=coef(lgrfit1),confint(lgrfit1)))
+  roc1 = roc(tool_features_df1_lg$TOP10,fitted(lgrfit1),plot=TRUE)
+  ggroc(roc1)
+  print("auc")
+  print(roc1$auc)
+  myfilename <- paste(tool,"_lgr_top10.png",sep="")
+  ggsave(myfilename)
+
+  
+  lgrfit2 <- step(lgrfit1)
+  print(summary(lgrfit2))
+  lgrfit2$anova
+  anova(lgrfit1,lgrfit2, test="Chisq")
+  roc2= roc(tool_features_df1_lg$TOP10,fitted(lgrfit2),plot=TRUE)
+  print("auc")
+  print(roc2$auc)
+  sink()
+  ggroc(roc2)
+  myfilename <- paste(tool,"_lgr_top10_stepback.png",sep="")
+  ggsave(myfilename)
+  
+  ##TOP20
+  lgrfit1<-glm(TOP20~tf_idf_ave+hpo_id_input_organ_system_number+HPO_n+hpo_gene_anno_number_ave+0, family=binomial(link = logit), data=tool_features_df1_lg)
+  myfilename <- paste(tool,"_lgr_top20.txt",sep="")
+  sink(myfilename)
+  print(summary(lgrfit1))
+  exp(cbind(OR=coef(lgrfit1),confint(lgrfit1)))
+  roc1 = roc(tool_features_df1_lg$TOP20,fitted(lgrfit1),plot=TRUE)
+  print("auc")
+  print(roc1$auc)
+  ggroc(roc1)
+  myfilename <- paste(tool,"_lgr_top20.png",sep="")
+  ggsave(myfilename)
+  
+  lgrfit2 <- step(lgrfit1)
+  print(summary(lgrfit2))
+  lgrfit2$anova
+  anova(lgrfit1,lgrfit2, test="Chisq")
+  roc2 = roc(tool_features_df1_lg$TOP20,fitted(lgrfit2),plot=TRUE)
+  print("auc")
+  print(roc2$auc)
+  ggroc(roc2)
+  myfilename <- paste(tool,"_lgr_top20_stepback.png",sep="")
+  ggsave(myfilename)
+  sink()
+}
+
+library(ResourceSelection)
+hoslem.test(features_df$TOP10,fitted(lgrfit1),g=7)
+
+library("tidyr")
+feature_df20=read.csv('/Users/liyaqi/Dropbox/PhenoAptAnalysis/multiple_system_cohort/hpo_id_11_rank_len_286_annoted.tsv', header = T, sep = '\t')
+cohort_list = read.csv("/Users/liyaqi/Dropbox/PhenoAptAnalysis/文章相关/non_inferior_cohort.csv")
+feature_df2 = subset(feature_df20,feature_df20$CaseID %in% as.list(cohort_list$CaseID))
+
+feature_df2 = drop_na(feature_df2,"HPO_dist_ave")
+feature_df2 = drop_na(feature_df2,"tf_idf_ave")
+lgrfit1<-glm(PheG_cadd_20_TOP10_d_Exomiser13_intersect_group~HPO_n+phenoapt_rank_TOP_score+phenoapt_rank_TOP10_score+HPO_dist_ave+tf_idf_ave, family=binomial(link = logit), data=feature_df2)
+summary(lgrfit1)
+exp(cbind(OR=coef(lgrfit1),confint(lgrfit1)))
+library(pROC)
+a = feature_df2$PheG_cadd_20_TOP10_d_Exomiser13_intersect_group
+b=fitted(lgrfit1)
+roc(a,b,plot=TRUE)
+feature_df1 = drop_na(features_df,"tf_idf_ave")
+feature_df1 = drop_na(feature_df1,"HPO_dist_ave")
+# feature_df1 = drop_na(features_df,"PhenoGenius_rank")
+# feature_df1 = subset(feature_df1, feature_df1$tf_idf_sum >= 22)
+lgrfit2<-glm(PheG_cadd_20_TOP10_d_Exomiser13_intersect_group~tf_idf_ave+HPO_n+HPO_dist_ave+Variant_level+Frequency, family=binomial(link = logit), data=feature_df2)
+summary(lgrfit2)
+# anova(lgrfit1,lgrfit2, test="Chisq")
+roc(feature_df2$PheG_cadd_20_TOP10_d_Exomiser13_intersect_group,fitted(lgrfit2),plot=TRUE)
+
+
+```
+
+##tf_idf_distribution_among_system_prediction_call_for_prospective_study
+
+```{r pressure, echo=FALSE}
+
+
+```
+
+##combine_figures
+```{r}
+setwd('/Users/liyaqi/Rproject/PhenoAPT_trial_rank/figures_for_script')
+library(patchwork)
+  p_filter /
+(top1_p| top5_p| top10_p | top20_p)
+myfilename ="benchmark_test.png"
+ggsave(filename = myfilename,width = 40, height = 25)
+  
+```
+
+##Desity
+```{r}
+#########---策略密度图----##########
+dat_3$patients<-rownames(dat_3)
+dat_3$patients<-factor(dat_3$patients,levels = rev(dat_3$patients))
+library(reshape2)
+data_3_set<-melt(dat_3[,7:dim(dat_3)[2]],id.vars='patients')
+data_3_set$strategy<-data_3_set$variable
+data_3_set=Add_a_column(data_3_set,strategy)
+data_3_set_p=subset(data_3_set,data_3_set$strategy%in% c('Pheno_only_tools'))##'Pheno_only_REVEL_0.75','Pheno_only_CADD_20','Integrated_REVEL_0.75','Integrated_CADD_20','Pheno_only_Qual_Freq_Filter','Integrated_Qual_Freq_Filter','Integrated_tools'
+data_3_set_p$value = as.numeric(data_3_set_p$value)
+library(ggplot2)
+library(ggpubr)
+mycolors=get_palette(palette = "jco", 18)
+p <- ggplot(data = data_3_set_p, mapping = aes(
+  x = value, color = variable, fill = variable))+geom_density(alpha = 0.4)+theme_bw()+xlim(0, 250)
+p
+p7=set_palette(p,'jco') +
+  labs(x ='Rank')+
+  labs(y='Density')+
+  scale_fill_manual(values = mycolors) +
+  scale_color_manual(values = mycolors)+##自定义颜色，可通过`library(RColorBrewer);display.brewer.all()`来展示所有备选项；geom_point(colour =)也可以设定点颜色+
+  guides(fill = guide_legend(nrow = 3, bycol = T, override.aes = list(size = 5)))+
+  theme(axis.title.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.title.x = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.y = element_text(face = 'bold',color = 'black',size = 25),
+        axis.text.x = element_text(face = 'bold',color = 'black',size = 25), 
+        panel.grid = element_blank(),
+        legend.position = 'bottom',
+        legend.key.height = unit(0.6,'cm'),#定义图例中色块的高度
+        legend.text = element_text(face = 'bold',color = 'black',size = 15),
+        legend.title = element_text(face = 'bold',color = 'black',size = 15))
+
+p7
+ggsave(filename = 'Density_pheno.png',width = 9, height = 7)
+
+```
+
+```{r}
+df=read.csv('/Users/liyaqi/Dropbox/PUMC/毕业/文稿/data/HPO_projection.csv')
+library(ggpubr)
+library(RColorBrewer)
+mycolors=get_palette(palette = "jco",30)
+comp<-unique(df$Group)
+
+#SpaPCA2
+comparisons <- list()
+for (i in 1:30) {
+  if (i != 12) {
+    comparisons <- c(comparisons, list(c(comp[12], comp[i])))
+  }
+}
+my_comparisons=comparisons
+# 打印出所有的比较关系
+print(comparisons)
+
+df_long=df[,c('HPOs','Group','spaPCA2')]
+
+p7=ggviolin(df_long,x='Group', y='spaPCA2', fill='Group',trim = F)+
+                 theme_bw()+
+  stat_compare_means(comparisons = my_comparisons, label = "p.signif", method = "wilcox.test",p.adjust.method = "bonferroni",size=4,step.increase = 0.04,vjust = 1.1)+
+  stat_compare_means(label.y = -10,label.x = 2,size=4)+
+  stat_summary(fun=mean, colour="darkred", geom="point", shape=18, size=3)+
+  stat_summary(fun=mean, colour="darkred", geom="text", size=5,
+               vjust=-1.7, aes( label=round(..y.., digits=3)))+
+  ggtitle('Organ System Distribution of SpaPCA2 Projection')+
+  scale_fill_manual(values=mycolors)+
+  theme(plot.title = element_text(size = 30, face = "bold"),
+          axis.title.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.title.x = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.x = element_text(face = 'bold',color = 'black',size =13,angle=45,vjust = 1,hjust = 1),
+        panel.grid = element_blank(),
+        legend.position = 'None')
+p7
+ggsave(filename = 'Organ System Distribution of SpaPCA2 Projection.png',width = 18, height = 8,limitsize = FALSE)
+
+##spaPCA3
+comparisons <- list()
+for (i in 1:30) {
+  if (i != 20) {
+    comparisons <- c(comparisons, list(c(comp[20], comp[i])))
+  }
+}
+my_comparisons=comparisons
+# 打印出所有的比较关系
+print(comparisons)
+
+df_long=df[,c('HPOs','Group','spaPCA3')]
+
+p7=ggviolin(df_long,x='Group', y='spaPCA3', fill='Group',trim = F)+
+                 theme_bw()+
+  stat_compare_means(comparisons = my_comparisons, label = "p.signif", method = "wilcox.test",p.adjust.method = "bonferroni",size=4,step.increase = 0.04,vjust = 1.1)+
+  stat_compare_means(label.y = -10,label.x = 2,size=4)+
+  stat_summary(fun=mean, colour="darkred", geom="point", shape=18, size=3)+
+  stat_summary(fun=mean, colour="darkred", geom="text", size=5,
+               vjust=-1.7, aes( label=round(..y.., digits=3)))+
+  ggtitle('Organ System Distribution of SpaPCA3 Projection')+
+  scale_fill_manual(values=mycolors)+
+  theme(plot.title = element_text(size = 30, face = "bold"),
+          axis.title.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.title.x = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.x = element_text(face = 'bold',color = 'black',size =13,angle=45,vjust = 1,hjust = 1),
+        panel.grid = element_blank(),
+        legend.position = 'None')
+p7
+ggsave(filename = 'Organ System Distribution of SpaPCA3 Projection.png',width = 18, height = 8,limitsize = FALSE)
+
+```
+
+```{r}
+###########---organ_distribution_TF_IDF-----#############
+library(ggpubr)
+library(RColorBrewer)
+tf_idf_organ=read.csv('/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/TF_IDF_distribution_for_R.tsv', header = T, sep = '\t')
+mycolors=get_palette(palette = "jco",25)
+tf_idf_organ$organ_system<-gsub('HP:0000707$','Nervous system',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000152$','Head and neck',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000924$','Skeletal',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000478$','Eye',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000119$','Genitourinary',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001574$','Integument',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0003011$','Muscle',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001626$','Cardiovascular',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001939$','Metabolism/Lab',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0025031$','Digestive',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000598$','Ear',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001507$','Growth',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001871$','Blood',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0002086$','Respiratory',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0040064$','Limbs',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000818$','Endocrine',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0002715$','Immunology',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001197$','Prenatal',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0003549$','Connective tissue',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0000769$','Breast',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0002664$','Neoplasm',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0025142$','Constitutional',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0001608$','Voice',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0025354$','Abnormal cellular',tf_idf_organ$organ_system)
+tf_idf_organ$organ_system<-gsub('HP:0045027$','Thoracic cavity',tf_idf_organ$organ_system)
+comp<-unique(tf_idf_organ$organ_system)
+comparisons=list()
+for (i in 1:25) {
+  if (i != 8) {
+    comparisons <- c(comparisons, list(c(comp[8], comp[i])))
+  }
+}
+my_comparisons=comparisons
+p7=ggviolin(tf_idf_organ,x='organ_system', y='TF_IDF', fill='organ_system',trim = F)+
+                 theme_bw()+
+  stat_compare_means(comparisons = my_comparisons, label = "p.signif", method = "wilcox.test",p.adjust.method = "bonferroni",size=4,step.increase = 0.04,vjust = 1)+
+  stat_compare_means(label.y = 1.29,label.x = 1.2,size=5)+
+  stat_summary(fun=mean, colour="darkred", geom="point", shape=18, size=3)+
+  stat_summary(fun=mean, colour="black",geom="text", size=6,
+               vjust=5.5, aes( label=round(..y.., digits=3)))+
+  ggtitle('TF IDF organ system distribution')+
+  scale_fill_manual(values=mycolors)+
+  theme(plot.title = element_text(size = 30, face = "bold"),
+        axis.title.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.title.x = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.y = element_text(face = 'bold',color = 'black',size = 30),
+        axis.text.x = element_text(face = 'bold',color = 'black',size =20,angle=45,vjust = 1,hjust = 1),
+        panel.grid = element_blank(),
+        legend.position = 'None')
+p7
+ggsave(filename = 'tf_idf_organs.png',width = 25, height = 10)
+
+```
+
+
+```{r}
+#############---heatmap of MRR of different tools--##########
+install.packages("BiocManager")
+BiocManager::install("ComplexHeatmap")
+dMRR = read.csv('/Users/liyaqi/PycharmProjects/PhenoAptAnalysis/dMRR_52.csv', header = T, sep = ',', row.names = 1)
+strategy_of_tools=read.csv('/Users/liyaqi/Documents/转化/研究方案/Strategy_of_tools.csv', header = T, sep = ',')
+names(strategy_of_tools) = factor(names(strategy_of_tools),levels=names(strategy_of_tools),labels = c('Tools','Population Inheritance','OMIM/Orphanet/HPO-A','Interactome','Animal Model','RNA-seq'))
+row.names(strategy_of_tools) = factor(rownames(strategy_of_tools),levels =rownames(strategy_of_tools),labels = c('LIRICAL','Exomiser','Exomiser13.1.0','Phen-Gen', 'PhenoApt','Phenomizer','Phenolyzer','GADO' ,'PhenoRank','Phen2Gene' ,'Phrank','HANRD'))
+names(dMRR) = factor(names(dMRR),levels =names(dMRR),labels = c('LIRICAL','Exomiser','Exomiser13.1.0','Phen-Gen', 'PhenoApt','Phenomizer','Phenolyzer','GADO' ,'PhenoRank','Phen2Gene' ,'Phrank','HANRD'))
+library('ComplexHeatmap')
+split_factor = c(rep(c("Integrated tools"), 4),rep(c("Pheno-only tools"), 8))
+library(circlize)
+col_fun = colorRamp2(c(-1, 0, 1), c("blue4", 'grey98', "red"))
+ha=HeatmapAnnotation(foo=anno_points(strategy_of_tools,  na_col = "grey",ylim = c(4,0),border = F,axis_param = list(side = "left", at = c(0, 1,2,3,4),labels = c('Population Inheritance','OMIM/Orphanet/HPO-A','Interactome','Animal Model','RNA-seq'))),show_annotation_name=F)
+Heatmap(dMRR, name = "dMRR", row_order = rownames(dMRR),column_order = colnames(dMRR),column_title = "dMRR between Clinical Indication input with and without PUS",column_names_rot = 45,column_split = split_factor,col=col_fun, border_gp = gpar(col = "black", lty = 2),bottom_annotation=ha)
+png("heatmap_dMRR.png",width=1,height=1,units="in",res=1200)
+```
+
+```{r}
+cadd_20_columns <- grep("cadd_20$", colnames(dat_3), value = TRUE)
+cadd_20_df <- dat_3[, cadd_20_columns]
+cadd_20_df
+
+# 加载必要的包
+library(dplyr)
+library(pROC)
+
+
+# 提取工具名称和排名列
+tool_columns <- grep("cadd_20$", colnames(cadd_20_df), value = TRUE)
+tools <- sub("_rank_cadd_20$", "", tool_columns)
+tool_Ns=read.csv('/Users/liyaqi/Dropbox/PUMC/毕业/文稿/N value.csv')
+rownames(tool_Ns)=tool_Ns$Tool
+# 函数：计算MRR
+calculate_mrr <- function(ranks) {
+  return(mean(1 / ranks))
+}
+
+# 函数：计算FCP
+calculate_fcp <- function(N,ranks) {
+  return(mean(1-ranks/(N-1)))
+}
+
+# 函数：计算MedRR
+calculate_medrr <- function(N,ranks) {
+  return(median(ranks)/N)
+}
+
+# 函数：计算Top-a
+calculate_top_a <- function(ranks, a) {
+  return(sum(ranks <= a)/length(ranks))
+}
+
+# 梯形规则计算AUC函数
+trapz <- function(x, y) {
+  sum((x[-1] - x[-length(x)]) * (y[-1] + y[-length(y)]) / 2)
+}
+# 函数：计算AUC
+calculate_auc <- function(ranks, N) {
+  thresholds <- seq(0, 1, length.out = N)
+  tpr <- sapply(thresholds, function(thresh) {
+    sum(ranks/N <= thresh) / length(ranks)
+  })
+  fpr <- thresholds  # 因为阈值是按照rank/N变化的，所以假阳性率直接用阈值表示
+  auc <- trapz(fpr, tpr)  # 使用梯形规则计算AUC
+  return(auc)
+}
+
+
+
+# 函数：计算NDCG
+calculate_NDCG <- function(N, ranks) {
+  NDCG <- mean(1/log2(ranks+1))
+  return(NDCG)
+}
+
+# 初始化结果数据框
+results <- data.frame(
+  Tool = tools,
+  MRR = numeric(length(tool_columns)),
+  FCP = numeric(length(tool_columns)),
+  MedRR = numeric(length(tool_columns)),
+  Top10 = numeric(length(tool_columns)),
+  AUC = numeric(length(tool_columns))
+)
+
+# 计算每个工具的指标
+for (i in seq_along(tool_columns)) {
+  tool <- tool_columns[i]
+  ranks <- cadd_20_df[[tool]]+1
+  N <- tool_Ns[sub("_rank_cadd_20$", "", tool),2]
+  ranks[is.na(ranks)] <- N + 1
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "MRR"] <- calculate_mrr(ranks)
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "FCP"] <- calculate_fcp(N,ranks)
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "MedRR"] <- calculate_medrr(N,ranks)
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "Top10"] <- calculate_top_a(ranks, 10)
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "AUC"] <- calculate_auc(ranks,N)
+  results[results$Tool == sub("_rank_cadd_20$", "", tool), "NDCG"] <- calculate_NDCG(N, ranks)
+  
+}
+
+# 输出结果
+print(results)
+
+```
+
+```{r}
+## 显著性计算
+cadd_20_columns <- grep("cadd_20$", colnames(dat_3), value = TRUE)
+cadd_20_df <- dat_3[, cadd_20_columns]
+cadd_20_df
+
+# 加载必要的包
+library(dplyr)
+library(pROC)
+
+
+# 提取工具名称和排名列
+tool_columns <- colnames(cadd_20_df)
+tools <- sub("_rank_cadd_20$", "", tool_columns)
+tool_Ns=read.csv('/Users/liyaqi/Dropbox/PUMC/毕业/文稿/N value.csv')
+rownames(tool_Ns)=tool_Ns$Tool
+colnames(cadd_20_df)=tools
+calculate_rr <- function(ranks) {
+  return(1 / ranks)
+}
+
+calculate_fcp_2 <- function(N,ranks) {
+  return(1 - ranks/(N-1))
+}
+
+calculate_DCG_2 <- function(N,ranks) {
+  return(1/log2(ranks+1))
+}
+comp=c(list(c('PhenoGenius','Exomiser13.1.0')),list(c('PhenoGenius','LIRICAL')),list(c('PhenoGenius','Xrare')))
+Metrics=c()
+for (k in 1:length(comp)){
+  Metrics=c(Metrics,paste( comp[[k]][[1]],' to ',comp[[k]][[2]]))
+}
+
+results1 <- data.frame(
+  RR_U = numeric(length(comp)),
+  RR_P = numeric(length(comp)),
+  FCP_U = numeric(length(comp)),
+  FCP_P = numeric(length(comp)),
+  DCG_U = numeric(length(comp)),
+  DCG_P = numeric(length(comp)),
+  Top20_odds_ratio = numeric(length(comp)),
+  Top20_P = numeric(length(comp))
+)
+rownames(results1)=Metrics
+
+# 计算每个工具的指标
+for (i in seq_along(comp)) {
+comp_ranks <- list(
+  list(),
+  list(),
+  list(),
+  list()
+)
+  for (j in c(1,2)){
+    ranks=cadd_20_df[comp[[i]][[j]]]+1
+    N <- tool_Ns[sub("_rank_cadd_20$", "", tool),2]
+    ranks[is.na(ranks)] <- N + 1
+    rr_ranks=calculate_rr(ranks+1)
+    fcp2_ranks=calculate_fcp_2(N,ranks)
+    DCG2_ranks=calculate_DCG_2(N,ranks)
+    comp_ranks[[1]][[j]]=c(rr_ranks[[1]])
+    comp_ranks[[2]][[j]]=c(fcp2_ranks[[1]])
+    comp_ranks[[3]][[j]]=c(DCG2_ranks[[1]])
+    comp_ranks[[4]][[j]]=sum((ranks) <= 20)/length(ranks)
+  }
+    delta <- 0.1 * mean(comp_ranks[[1]][[2]])
+    # 计算样本差异，并加上 delta
+    differences <- comp_ranks[[1]][[1]] - comp_ranks[[1]][[2]] + delta
+    # 进行配对Wilcoxon检验
+    wilcox_test_result <- wilcox.test(differences, mu = 0, alternative = "greater")
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "RR_U"] <- wilcox_test_result$statistic
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "RR_P"] <- wilcox_test_result$p.value
+  delta <- 0.1 * mean(comp_ranks[[2]][[2]])
+    # 计算样本差异，并加上 delta
+  differences <- comp_ranks[[2]][[1]] - comp_ranks[[2]][[2]] + delta
+    # 进行配对Wilcoxon检验
+  wilcox_test_result <- wilcox.test(differences, mu = 0, alternative = "greater")
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "FCP_U"] <- wilcox_test_result$statistic
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "FCP_P"] <- wilcox_test_result$p.value
+  delta <- 0.1 * mean(comp_ranks[[3]][[2]])
+    # 计算样本差异，并加上 delta
+  differences <- comp_ranks[[3]][[1]] - comp_ranks[[3]][[2]] + delta
+    # 进行配对Wilcoxon检验
+  wilcox_test_result <- wilcox.test(differences, mu = 0, alternative = "greater")
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "DCG_U"] <- wilcox_test_result$statistic
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "DCG_P"] <- wilcox_test_result$p.value
+  # 示例列联表数据
+  a <- comp_ranks[[4]][[1]]  # Treatment 1 的成功数
+  b <- 281-comp_ranks[[4]][[1]]  # Treatment 1 的失败数
+  c <- comp_ranks[[4]][[2]]  # Treatment 2 的成功数
+  d <- 281-comp_ranks[[4]][[2]]  # Treatment 2 的失败数
+
+  # 构建列联表
+  contingency_table <- matrix(c(a, b, c, d), nrow = 2, byrow = TRUE)
+  colnames(contingency_table) <- c("Success", "Failure")
+  rownames(contingency_table) <- c("Treatment 1", "Treatment 2")
+
+  # 打印列联表
+  print(contingency_table)
+delta=0.05
+# 调整成功数和失败数
+adjusted_success_1 <- a + delta * (a + b)
+adjusted_failure_1 <- b - delta * (a + b)
+adjusted_contingency_table <- matrix(c(adjusted_success_1, adjusted_failure_1, c, d), nrow = 2, byrow = TRUE)
+colnames(adjusted_contingency_table) <- c("Success", "Failure")
+rownames(adjusted_contingency_table) <- c("Treatment 1", "Treatment 2")
+
+# 进行非劣效性检验 (Fisher's exact test)
+fisher_test_result <- fisher.test(adjusted_contingency_table, alternative = "greater")
+
+  
+  results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "Top20_odds_ratio"]=paste(round(fisher_test_result$estimate,4),' (',round(fisher_test_result$conf.int[1],4),', ',round(fisher_test_result$conf.int[2],4),')',sep='')
+   results1[paste( comp[[i]][[1]],' to ',comp[[i]][[2]]), "Top20_P"] <- fisher_test_result$p.value
+}
+
+# 输出结果
+print(results1)
+
+results1$RR_P=p.adjust(results1$RR_P,method = 'BH')
+results1$FCP_P=p.adjust(results1$FCP_P,method = 'BH')
+results1$DCG_P=p.adjust(results1$DCG_P,method = 'BH')
+results1$Top20_P=p.adjust(results1$Top20_P,method = 'BH')
+
+results1
+
+```
+
+
+
+```{r}
+library(pheatmap)
+# 格式化结果，保留两位小数
+results$Tool=factor(results$Tool,levels =c("phenoapt","phenomizer", "phenolyzer","GADO","PhenoRank","phen2gene","phrank","HANRD","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare" ),labels = c("phenoapt","phenomizer", "phenolyzer","GADO","PhenoRank","phen2gene","phrank","HANRD","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare" ))
+
+# 创建新的数据框，只保留所选的列
+formatted_results <- results 
+formatted_results[ , -1] <- lapply(formatted_results[ , -1], function(x) format(round(x, 4), nsmall = 2))
+
+# 计算Zscore
+zscore_normalization <- function(x) {
+  return((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+
+# 初始化Zscore结果数据框
+zscore_results <- as.data.frame(lapply(results[ , -1], zscore_normalization))
+rownames(zscore_results) <- results$Tool
+colnames(zscore_results)[2]="MFCP'"
+colnames(zscore_results)[6]="NDCG'"
+
+# 创建热图所需的矩阵，原始值在格子里显示
+heatmap_matrix <- as.matrix(formatted_results[ , -1])
+rownames(heatmap_matrix) <- results$Tool
+colnames(heatmap_matrix)[2]="MFCP'"
+colnames(heatmap_matrix)[2]="NDCG'"
+
+# 确保行名顺序与results中相同
+zscore_results <- zscore_results[levels(results$Tool), ]
+heatmap_matrix <- heatmap_matrix[levels(results$Tool), ]
+
+
+# 绘制热图
+pheatmap(
+  mat = zscore_results,
+  display_numbers = heatmap_matrix,
+  color = colorRampPalette(c("blue", "white", "red"))(100),
+  number_color = "black",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  clustering_method = "median",
+  angle_col = 0,
+  main = "Normalized Benchmark Metrics \n using VCF Filtered by CADD 20"
+)
+
+```
+
+
+```{r}
+library(pheatmap)
+# 格式化结果，保留两位小数
+results$Tool=factor(results$Tool,levels =rev(c("phenoapt","phenomizer", "phenolyzer","GADO","PhenoRank","phen2gene","phrank","HANRD","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare" )),labels =rev( c("phenoapt","phenomizer", "phenolyzer","GADO","PhenoRank","phen2gene","phrank","HANRD","PhenoGenius","Exomiser13.1.0","LIRICAL","Xrare" )))
+
+# 创建新的数据框，只保留所选的列
+formatted_results <- results 
+formatted_results[ , -1] <- lapply(formatted_results[ , -1], function(x) format(round(x, 4), nsmall = 2))
+
+# 计算Zscore
+zscore_normalization <- function(x) {
+  return((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+
+# 初始化Zscore结果数据框
+zscore_results <- as.data.frame(lapply(results[ , -1], zscore_normalization))
+rownames(zscore_results) <- results$Tool
+colnames(zscore_results)=colnames(results)[-1]
+colnames(zscore_results)[2]="MFCP'"
+colnames(zscore_results)[6]="NDCG'"
+
+# 创建热图所需的矩阵，原始值在格子里显示
+heatmap_matrix <- as.matrix(formatted_results[ , -1])
+rownames(heatmap_matrix) <- results$Tool
+colnames(heatmap_matrix)=colnames(results)[-1]
+colnames(heatmap_matrix)[2]="MFCP'"
+colnames(heatmap_matrix)[2]="NDCG'"
+
+# 确保行名顺序与results中相同
+zscore_results <- zscore_results[levels(results$Tool), ]
+heatmap_matrix <- heatmap_matrix[levels(results$Tool), ]
+selected_columns <- c("MedRR", "Top10", "MRR", "NDCG'")
+
+# 绘制热图
+pheatmap(
+  mat = zscore_results[selected_columns],
+  display_numbers = heatmap_matrix[,selected_columns],
+  color = colorRampPalette(c("blue", "white", "red"))(100),
+  number_color = "black",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  clustering_method = "ward.D",
+  angle_col = 0,
+  main = "Normalized Benchmark Metrics\n using VCF Filtered by CADD 20"
+)
+
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
